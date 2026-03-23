@@ -313,6 +313,12 @@ export function ShotFactory() {
             onToggleSelect={toggleShotSelection}
             onRangeSelect={selectShotRange}
             onDoubleClick={(id) => {
+              // If Creative Console is open, dismiss it and show ShotDetail
+              if (showConsole) {
+                setShowConsole(false)
+                selectShot(id)
+                return
+              }
               const shot = shots.find(s => s.manifest.id === id)
               if (shot && shot.frameIterations.length > 0) {
                 setLightboxShotId(id)
