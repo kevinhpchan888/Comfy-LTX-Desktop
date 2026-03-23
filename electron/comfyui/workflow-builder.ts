@@ -435,9 +435,11 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
     genNode.inputs['audio'] = [OPTIONAL_NODE_IDS.uploadAudio, 0]
   }
 
-  // Connect frame images if provided (LoadImage → upscale → RSLTXVGenerate)
-  // Uses RTX Super Resolution on NVIDIA GPUs, falls back to lanczos ImageScale otherwise
-  const useRtxFrameUpscale = params.gpuSupportsRtx !== false
+  // Connect frame images if provided (LoadImage → scale → RSLTXVGenerate)
+  // Always use ImageScale for frame cropping/resizing — RTX Super Resolution requires
+  // the NVIDIA Video Effects SDK (nvvfx) which most users won't have installed.
+  // RTX is still available for the explicit 4K post-processing upscale step.
+  const useRtxFrameUpscale = false
   // When not preserving aspect ratio, center crop to target aspect ratio before scaling
   const frameCrop = params.preserveAspectRatio ? 'disabled' : 'center'
 
