@@ -265,6 +265,13 @@ function buildZImageWorkflow(workflow: Workflow, params: WorkflowParams): Record
     workflow[OPTIONAL_NODE_IDS.zImageSaveImage].inputs['filename_prefix'] = `${safeProjectName}/image/${safeProjectName}`
   }
 
+  // Safety: strip any RSRTXSuperResolution nodes (nvvfx usually not installed)
+  for (const id of Object.keys(workflow)) {
+    if (workflow[id]?.class_type === 'RSRTXSuperResolution') {
+      delete workflow[id]
+    }
+  }
+
   return workflow as unknown as Record<string, unknown>
 }
 
@@ -444,12 +451,13 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
   const frameCrop = params.preserveAspectRatio ? 'disabled' : 'center'
 
   if (!useRtxFrameUpscale) {
-    // Replace RSRTXSuperResolution nodes with ImageScale for non-NVIDIA GPUs
+    // Replace RSRTXSuperResolution nodes with ImageScale — only for nodes still in the workflow
     for (const [id, srcId] of [
       [OPTIONAL_NODE_IDS.cropFirstFrame, OPTIONAL_NODE_IDS.firstFrame],
       [OPTIONAL_NODE_IDS.cropMiddleFrame, OPTIONAL_NODE_IDS.middleFrame],
       [OPTIONAL_NODE_IDS.cropLastFrame, OPTIONAL_NODE_IDS.lastFrame],
     ] as const) {
+      if (!(id in workflow)) continue
       workflow[id] = {
         class_type: 'ImageScale',
         inputs: {
@@ -629,6 +637,14 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
     workflow['25'].inputs['filename_prefix'] = `${safeProjectName}/video/${safeProjectName}`
     if (workflow[OPTIONAL_NODE_IDS.zImageSaveImage]) {
       workflow[OPTIONAL_NODE_IDS.zImageSaveImage].inputs['filename_prefix'] = `${safeProjectName}/image/${safeProjectName}`
+    }
+  }
+
+  // Safety: strip any remaining RSRTXSuperResolution nodes from the workflow.
+  // nvvfx is rarely installed and ComfyUI rejects workflows with unloaded node classes.
+  for (const id of Object.keys(workflow)) {
+    if (workflow[id]?.class_type === 'RSRTXSuperResolution') {
+      delete workflow[id]
     }
   }
 

@@ -241,7 +241,16 @@ export function registerComfyUIHandlers(): void {
       if (genNode) {
         logger.info(`Workflow node 6: width=${genNode.inputs['width']} height=${genNode.inputs['height']} upscale=${genNode.inputs['upscale']} upscale_model=${JSON.stringify(genNode.inputs['upscale_model'])} temporal_upscale_model=${JSON.stringify(genNode.inputs['temporal_upscale_model'])}`)
       }
-      logger.info(`Workflow node IDs: ${Object.keys(workflow).join(', ')}`)
+      const nodeIds = Object.keys(workflow)
+      logger.info(`Workflow node IDs: ${nodeIds.join(', ')}`)
+      // Check for any remaining RSRTXSuperResolution nodes
+      const rtxNodes = nodeIds.filter(id => {
+        const node = workflow[id] as { class_type?: string } | undefined
+        return node?.class_type === 'RSRTXSuperResolution'
+      })
+      if (rtxNodes.length > 0) {
+        logger.warn(`WARNING: Workflow still contains RSRTXSuperResolution nodes: ${rtxNodes.join(', ')}`)
+      }
 
       // 6. Connect WebSocket for progress
       // Use the client's actual URL (may have been auto-discovered on a different port)
