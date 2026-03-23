@@ -4,11 +4,13 @@ import {
   Heart, Film, Volume2, VolumeX, Sparkles,
   Clock, Monitor, ChevronUp, Scissors, RefreshCw,
   ChevronLeft, ChevronRight, Copy, Check,
-  Menu, Square, ArrowUpDown
+  Menu, Square, ArrowUpDown, ListPlus, XCircle,
+  CheckCircle2, AlertCircle, Loader2
 } from 'lucide-react'
 import { useProjects } from '../contexts/ProjectContext'
 import type { GenSpaceRetakeSource } from '../contexts/ProjectContext'
 import { useGeneration } from '../contexts/GenerationContext'
+import type { QueueItem, QueueItemParams } from '../contexts/GenerationContext'
 import { useRetake } from '../hooks/use-retake'
 import { useAppSettings } from '../contexts/AppSettingsContext'
 import type { Asset } from '../types/project'
@@ -283,6 +285,122 @@ function AspectIcon({ className }: { className?: string }) {
   )
 }
 
+// Batch queue panel — shows queued generation items
+function BatchQueuePanel({
+  queue,
+  onRemove,
+  onClear,
+  onCancel,
+  isProcessing,
+}: {
+  queue: QueueItem[]
+  onRemove: (id: string) => void
+  onClear: () => void
+  onCancel: () => void
+  isProcessing: boolean
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const activeCount = queue.filter(q => q.status === 'pending' || q.status === 'generating').length
+  const completedCount = queue.filter(q => q.status === 'complete').length
+  const errorCount = queue.filter(q => q.status === 'error').length
+
+  const statusIcon = (status: QueueItem['status']) => {
+    switch (status) {
+      case 'pending': return <Clock className="h-3.5 w-3.5 text-zinc-500" />
+      case 'generating': return <Loader2 className="h-3.5 w-3.5 text-violet-400 animate-spin" />
+      case 'complete': return <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+      case 'error': return <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+      case 'cancelled': return <XCircle className="h-3.5 w-3.5 text-zinc-500" />
+    }
+  }
+
+  return (
+    <div className="absolute bottom-[130px] right-4 w-[340px] z-20">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <ListPlus className="h-4 w-4 text-violet-400" />
+            <span className="text-sm font-medium text-white">Batch Queue</span>
+            <span className="text-xs text-zinc-500">
+              {activeCount > 0 ? `${activeCount} remaining` : `${completedCount} done`}
+              {errorCount > 0 && ` · ${errorCount} failed`}
+            </span>
+          </div>
+          <ChevronUp className={`h-4 w-4 text-zinc-500 transition-transform ${expanded ? '' : 'rotate-180'}`} />
+        </button>
+
+        {expanded && (
+          <>
+            {/* Queue items */}
+            <div className="max-h-[240px] overflow-y-auto border-t border-zinc-800/60">
+              {queue.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`flex items-start gap-2 px-4 py-2.5 border-b border-zinc-800/40 ${
+                    item.status === 'generating' ? 'bg-violet-500/5' : ''
+                  }`}
+                >
+                  <div className="mt-0.5 flex-shrink-0">
+                    {statusIcon(item.status)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase font-medium text-zinc-600">
+                        #{index + 1} {item.params.type}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-300 truncate mt-0.5">{item.params.prompt}</p>
+                    {item.status === 'generating' && item.progress > 0 && (
+                      <div className="w-full h-1 bg-zinc-800 rounded-full mt-1.5 overflow-hidden">
+                        <div className="h-full bg-violet-500 transition-all" style={{ width: `${item.progress}%` }} />
+                      </div>
+                    )}
+                    {item.status === 'error' && item.error && (
+                      <p className="text-[10px] text-red-400 mt-0.5 truncate">{item.error}</p>
+                    )}
+                  </div>
+                  {item.status === 'pending' && (
+                    <button
+                      onClick={() => onRemove(item.id)}
+                      className="mt-0.5 p-0.5 rounded hover:bg-zinc-800 text-zinc-600 hover:text-zinc-400 transition-colors flex-shrink-0"
+                      title="Remove from queue"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer actions */}
+            <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800/60">
+              <button
+                onClick={onClear}
+                className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Clear All
+              </button>
+              {isProcessing && (
+                <button
+                  onClick={onCancel}
+                  className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <Square className="h-3 w-3" />
+                  Stop Queue
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Prompt bar component — video mode only (T2V / I2V)
 function PromptBar({
   mode,
@@ -299,6 +417,8 @@ function PromptBar({
   canGenerate,
   buttonLabel,
   buttonIcon,
+  onAddToQueue,
+  queueCount,
 }: {
   mode: 'video' | 'retake'
   onModeChange: (mode: 'video' | 'retake') => void
@@ -314,6 +434,8 @@ function PromptBar({
   onInputImageChange: (url: string | null) => void
   settings: GenerationSettings
   onSettingsChange: (settings: GenerationSettings) => void
+  onAddToQueue: () => void
+  queueCount: number
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -516,6 +638,26 @@ function PromptBar({
           </>
         )}
 
+        {/* Add to Queue button — not shown in retake mode */}
+        {!isGenerating && mode !== 'retake' && (
+          <button
+            onClick={onAddToQueue}
+            disabled={!canGenerate}
+            className={`flex items-center gap-1.5 ml-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-shrink-0 ${
+              !canGenerate
+                ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                : 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600'
+            }`}
+            title="Add to batch queue"
+          >
+            <ListPlus className="h-3.5 w-3.5" />
+            Queue
+            {queueCount > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-violet-600 text-white text-[10px] leading-none">{queueCount}</span>
+            )}
+          </button>
+        )}
+
         {/* Generate / Stop button */}
         {isGenerating ? (
           <button
@@ -670,6 +812,12 @@ export function GenSpace() {
     error,
     cancel,
     reset,
+    queue,
+    addToQueue,
+    removeFromQueue,
+    clearQueue,
+    cancelQueue,
+    isProcessingQueue,
   } = useGeneration()
 
   const {
@@ -1007,6 +1155,46 @@ export function GenSpace() {
       currentProject?.name,
       preserveAspectRatio,
     )
+  }
+
+  const handleAddToQueue = () => {
+    if (!prompt.trim()) return
+    if (mode === 'retake') return // Retake doesn't support batch
+
+    const imagePath = inputImage ? fileUrlToPath(inputImage) : null
+    const middleImagePath = selectedMiddleImage ? fileUrlToPath(selectedMiddleImage) : null
+    const lastImagePath = selectedLastImage ? fileUrlToPath(selectedLastImage) : null
+    const audioPath = selectedAudio ? fileUrlToPath(selectedAudio) : null
+    const effectiveSettings = { ...settings }
+    if (audioPath) effectiveSettings.model = 'pro'
+
+    const params: QueueItemParams = genMode === 'text-to-image'
+      ? {
+          type: 'image',
+          prompt,
+          settings: effectiveSettings,
+          projectName: currentProject?.name,
+        }
+      : {
+          type: 'video',
+          prompt,
+          settings: effectiveSettings,
+          imagePath,
+          middleImagePath,
+          lastImagePath,
+          audioPath,
+          strengths: {
+            first: firstStrength,
+            middle: middleStrength,
+            last: lastStrength,
+          },
+          projectName: currentProject?.name,
+          preserveAspectRatio,
+        }
+
+    addToQueue(params)
+    // Clear prompt for next entry but keep settings/images
+    setPrompt('')
   }
 
   const handleDelete = (assetId: string) => {
@@ -1472,6 +1660,17 @@ export function GenSpace() {
         </div>
       )}
 
+      {/* Batch queue panel */}
+      {queue.length > 0 && (
+        <BatchQueuePanel
+          queue={queue}
+          onRemove={removeFromQueue}
+          onClear={clearQueue}
+          onCancel={cancelQueue}
+          isProcessing={isProcessingQueue}
+        />
+      )}
+
       {/* Floating prompt panel */}
       <div className="absolute bottom-5 left-1/2 w-[min(700px,calc(100%-2rem))] -translate-x-1/2">
         <PromptBar
@@ -1492,6 +1691,8 @@ export function GenSpace() {
           onInputImageChange={setInputImage}
           settings={settings}
           onSettingsChange={handleSettingsChange}
+          onAddToQueue={handleAddToQueue}
+          queueCount={queue.filter(q => q.status === 'pending' || q.status === 'generating').length}
         />
       </div>
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import type { GenerationSettings } from '../components/SettingsPanel'
 
 interface GenerationState {
@@ -23,11 +23,48 @@ interface GenerationProgress {
   totalSteps: number | null
 }
 
+export type QueueItemStatus = 'pending' | 'generating' | 'complete' | 'error' | 'cancelled'
+
+export interface QueueItemParams {
+  type: 'video' | 'image'
+  prompt: string
+  settings: GenerationSettings
+  imagePath?: string | null
+  middleImagePath?: string | null
+  lastImagePath?: string | null
+  audioPath?: string | null
+  strengths?: { first?: number; middle?: number; last?: number }
+  projectName?: string
+  preserveAspectRatio?: boolean
+  imageStrength?: number
+}
+
+export interface QueueItem {
+  id: string
+  params: QueueItemParams
+  status: QueueItemStatus
+  progress: number
+  statusMessage: string
+  videoUrl: string | null
+  videoPath: string | null
+  imageUrl: string | null
+  error: string | null
+  addedAt: number
+}
+
 export interface GenerationContextType extends GenerationState {
   generate: (prompt: string, imagePath: string | null, settings: GenerationSettings, audioPath?: string | null, middleImagePath?: string | null, lastImagePath?: string | null, strengths?: { first?: number; middle?: number; last?: number }, projectName?: string, preserveAspectRatio?: boolean) => Promise<void>
   generateImage: (prompt: string, settings: GenerationSettings, imagePath?: string | null, strength?: number, projectName?: string) => Promise<void>
   cancel: () => void
   reset: () => void
+  // Batch queue
+  queue: QueueItem[]
+  addToQueue: (params: QueueItemParams) => void
+  removeFromQueue: (id: string) => void
+  clearQueue: () => void
+  cancelQueue: () => void
+  isProcessingQueue: boolean
+  queuePosition: number // 0-based index of currently processing item, -1 if not processing
 }
 
 const GenerationContext = createContext<GenerationContextType | null>(null)
@@ -59,9 +96,16 @@ const INITIAL_STATE: GenerationState = {
   iterationTotal: 0,
 }
 
+let nextQueueId = 1
+
 export function GenerationProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GenerationState>(INITIAL_STATE)
+  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false)
+  const [queuePosition, setQueuePosition] = useState(-1)
   const cancelledRef = useRef(false)
+  const queueCancelledRef = useRef(false)
+  const processingQueueRef = useRef(false)
 
   const generate = useCallback(async (
     prompt: string,
@@ -339,6 +383,282 @@ export function GenerationProvider({ children }: { children: React.ReactNode }) 
     setState(INITIAL_STATE)
   }, [])
 
+  // --- Batch Queue ---
+
+  const addToQueue = useCallback((params: QueueItemParams) => {
+    const id = `queue-${nextQueueId++}-${Date.now()}`
+    const item: QueueItem = {
+      id,
+      params,
+      status: 'pending',
+      progress: 0,
+      statusMessage: 'Waiting...',
+      videoUrl: null,
+      videoPath: null,
+      imageUrl: null,
+      error: null,
+      addedAt: Date.now(),
+    }
+    setQueue(prev => [...prev, item])
+  }, [])
+
+  const removeFromQueue = useCallback((id: string) => {
+    setQueue(prev => prev.filter(item => item.id !== id))
+  }, [])
+
+  const clearQueue = useCallback(() => {
+    if (processingQueueRef.current) {
+      queueCancelledRef.current = true
+      cancelledRef.current = true
+      window.electronAPI.cancelGeneration().catch(() => {})
+    }
+    setQueue([])
+    setIsProcessingQueue(false)
+    setQueuePosition(-1)
+    processingQueueRef.current = false
+  }, [])
+
+  const cancelQueue = useCallback(() => {
+    queueCancelledRef.current = true
+    cancelledRef.current = true
+    window.electronAPI.cancelGeneration().catch(() => {})
+    setQueue(prev => prev.map(item =>
+      item.status === 'pending' ? { ...item, status: 'cancelled' as const, statusMessage: 'Cancelled' } :
+      item.status === 'generating' ? { ...item, status: 'cancelled' as const, statusMessage: 'Cancelled' } :
+      item
+    ))
+    setIsProcessingQueue(false)
+    setQueuePosition(-1)
+    processingQueueRef.current = false
+    setState(prev => ({
+      ...prev,
+      isGenerating: false,
+      statusMessage: 'Queue cancelled',
+    }))
+  }, [])
+
+  // Process queue items sequentially
+  const processQueueItem = useCallback(async (item: QueueItem): Promise<void> => {
+    const { params } = item
+    cancelledRef.current = false
+    let progressInterval: ReturnType<typeof setInterval> | null = null
+
+    // Mark item as generating
+    setQueue(prev => prev.map(q =>
+      q.id === item.id ? { ...q, status: 'generating' as const, statusMessage: 'Generating...', progress: 0 } : q
+    ))
+
+    const isImage = params.type === 'image'
+    const statusLabel = isImage ? 'image' : 'video'
+
+    setState({
+      isGenerating: true,
+      progress: 0,
+      statusMessage: `Generating ${statusLabel}...`,
+      videoUrl: null,
+      videoPath: null,
+      enhancedPrompt: null,
+      imageUrl: null,
+      imageUrls: [],
+      error: null,
+      iterationCurrent: 0,
+      iterationTotal: 0,
+    })
+
+    try {
+      const pollProgress = async () => {
+        if (cancelledRef.current || queueCancelledRef.current) return
+        try {
+          const data: GenerationProgress = await window.electronAPI.getGenerationProgress()
+          if (cancelledRef.current || queueCancelledRef.current) return
+          setState(prev => ({
+            ...prev,
+            progress: data.progress,
+            statusMessage: getPhaseMessage(data.phase),
+          }))
+          setQueue(prev => prev.map(q =>
+            q.id === item.id ? { ...q, progress: data.progress, statusMessage: getPhaseMessage(data.phase) } : q
+          ))
+        } catch {
+          // Ignore polling errors
+        }
+      }
+
+      progressInterval = setInterval(pollProgress, 500)
+
+      let result: { status: string; video_path?: string; image_path?: string; enhanced_prompt?: string; error?: string }
+
+      if (isImage) {
+        const imageParams = {
+          prompt: params.prompt,
+          imagePath: params.imagePath,
+          resolution: '1080p',
+          aspectRatio: params.settings.imageAspectRatio || params.settings.aspectRatio || '16:9',
+          duration: 0,
+          fps: 24,
+          firstStrength: params.imageStrength,
+          imageMode: true,
+          imageSteps: params.settings.imageSteps,
+          projectName: params.projectName,
+        }
+        result = await window.electronAPI.generateVideo(imageParams)
+      } else {
+        const is4K = params.settings.videoResolution === '4K'
+        const videoParams = {
+          prompt: params.prompt,
+          imagePath: params.imagePath,
+          middleImagePath: params.middleImagePath,
+          lastImagePath: params.lastImagePath,
+          audioPath: params.audioPath,
+          resolution: is4K ? '1080p' : params.settings.videoResolution,
+          aspectRatio: params.settings.aspectRatio || '16:9',
+          duration: params.settings.duration,
+          fps: params.settings.fps,
+          cameraMotion: params.settings.cameraMotion,
+          spatialUpscale: params.settings.spatialUpscale,
+          upscaleDenoise: params.settings.upscaleDenoise,
+          temporalUpscale: params.settings.temporalUpscale,
+          promptEnhance: params.settings.promptEnhance,
+          filmGrain: params.settings.filmGrain,
+          filmGrainIntensity: params.settings.filmGrainIntensity,
+          filmGrainSize: params.settings.filmGrainSize,
+          firstStrength: params.strengths?.first,
+          middleStrength: params.strengths?.middle,
+          lastStrength: params.strengths?.last,
+          rtxSuperRes: is4K,
+          preserveAspectRatio: params.preserveAspectRatio,
+          projectName: params.projectName,
+        }
+        result = await window.electronAPI.generateVideo(videoParams)
+      }
+
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+
+      if (cancelledRef.current || queueCancelledRef.current) {
+        setQueue(prev => prev.map(q =>
+          q.id === item.id ? { ...q, status: 'cancelled' as const, statusMessage: 'Cancelled' } : q
+        ))
+        return
+      }
+
+      if (result.status === 'complete') {
+        if (isImage && result.image_path) {
+          const normalized = result.image_path.replace(/\\/g, '/')
+          const fileUrl = normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
+          setQueue(prev => prev.map(q =>
+            q.id === item.id ? { ...q, status: 'complete' as const, progress: 100, statusMessage: 'Complete!', imageUrl: fileUrl } : q
+          ))
+          setState({
+            isGenerating: false,
+            progress: 100,
+            statusMessage: 'Complete!',
+            videoUrl: null,
+            videoPath: null,
+            enhancedPrompt: null,
+            imageUrl: fileUrl,
+            imageUrls: [fileUrl],
+            error: null,
+            iterationCurrent: 0,
+            iterationTotal: 0,
+          })
+        } else if (result.video_path) {
+          const videoPathNormalized = result.video_path.replace(/\\/g, '/')
+          const fileUrl = videoPathNormalized.startsWith('/') ? `file://${videoPathNormalized}` : `file:///${videoPathNormalized}`
+          setQueue(prev => prev.map(q =>
+            q.id === item.id ? { ...q, status: 'complete' as const, progress: 100, statusMessage: 'Complete!', videoUrl: fileUrl, videoPath: result.video_path ?? null } : q
+          ))
+          setState({
+            isGenerating: false,
+            progress: 100,
+            statusMessage: 'Complete!',
+            videoUrl: fileUrl,
+            videoPath: result.video_path,
+            enhancedPrompt: result.enhanced_prompt ?? null,
+            imageUrl: null,
+            imageUrls: [],
+            error: null,
+            iterationCurrent: 0,
+            iterationTotal: 0,
+          })
+        }
+      } else if (result.status === 'cancelled') {
+        setQueue(prev => prev.map(q =>
+          q.id === item.id ? { ...q, status: 'cancelled' as const, statusMessage: 'Cancelled' } : q
+        ))
+      } else if (result.error) {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+      setQueue(prev => prev.map(q =>
+        q.id === item.id ? { ...q, status: 'error' as const, statusMessage: errorMsg, error: errorMsg } : q
+      ))
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        error: errorMsg,
+      }))
+    } finally {
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+    }
+  }, [])
+
+  // Auto-process queue when items are added
+  useEffect(() => {
+    if (processingQueueRef.current) return
+
+    const pendingItems = queue.filter(q => q.status === 'pending')
+    if (pendingItems.length === 0) return
+    if (state.isGenerating) return
+
+    const runQueue = async () => {
+      processingQueueRef.current = true
+      queueCancelledRef.current = false
+      setIsProcessingQueue(true)
+
+      // Snapshot pending IDs at start
+      const pendingIds = queue.filter(q => q.status === 'pending').map(q => q.id)
+
+      for (let i = 0; i < pendingIds.length; i++) {
+        if (queueCancelledRef.current) break
+
+        setQueuePosition(i)
+
+        // Re-check the item is still pending (user may have removed it)
+        const currentQueue = await new Promise<QueueItem[]>(resolve => {
+          setQueue(prev => {
+            resolve(prev)
+            return prev
+          })
+        })
+        const item = currentQueue.find(q => q.id === pendingIds[i] && q.status === 'pending')
+        if (!item) continue
+
+        await processQueueItem(item)
+
+        // Brief pause between items
+        if (!queueCancelledRef.current) {
+          await new Promise(r => setTimeout(r, 200))
+        }
+      }
+
+      setIsProcessingQueue(false)
+      setQueuePosition(-1)
+      processingQueueRef.current = false
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+      }))
+    }
+
+    runQueue()
+  }, [queue, state.isGenerating, processQueueItem])
+
   return (
     <GenerationContext.Provider value={{
       ...state,
@@ -346,6 +666,13 @@ export function GenerationProvider({ children }: { children: React.ReactNode }) 
       generateImage,
       cancel,
       reset,
+      queue,
+      addToQueue,
+      removeFromQueue,
+      clearQueue,
+      cancelQueue,
+      isProcessingQueue,
+      queuePosition,
     }}>
       {children}
     </GenerationContext.Provider>
