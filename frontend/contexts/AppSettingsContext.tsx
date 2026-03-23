@@ -25,6 +25,24 @@ export interface AppSettings {
   promptEnhanceSystemPrompt: string
   tileT: number
   ffnChunks: number
+  // Factory settings
+  factoryAiProvider: 'anthropic' | 'local' | 'hybrid'
+  factoryAnthropicApiKey: string
+  factoryAnthropicModel: string
+  factoryProxyUrl: string
+  factoryProxyToken: string
+  factoryProxyModel: string
+  factoryDefaultDuration: number
+  factoryDefaultResolution: string
+  factoryDefaultFps: number
+  factoryDefaultIterations: number
+  factoryDefaultAspectRatio: string
+  factoryDelayBetweenShots: number
+  factoryRenderTimeout: number
+  factoryMaxRetries: number
+  factoryProgressPollInterval: number
+  factoryAutoSaveInterval: number
+  factoryCrashRecovery: boolean
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -51,6 +69,24 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   imageGenerator: 'none',
   tileT: 0,
   ffnChunks: 2,
+  // Factory defaults
+  factoryAiProvider: 'anthropic',
+  factoryAnthropicApiKey: '',
+  factoryAnthropicModel: 'claude-sonnet-4-6',
+  factoryProxyUrl: 'http://localhost:4000',
+  factoryProxyToken: '',
+  factoryProxyModel: 'ollama/qwen3-32b',
+  factoryDefaultDuration: 5,
+  factoryDefaultResolution: '720p',
+  factoryDefaultFps: 24,
+  factoryDefaultIterations: 3,
+  factoryDefaultAspectRatio: '16:9',
+  factoryDelayBetweenShots: 5000,
+  factoryRenderTimeout: 300000,
+  factoryMaxRetries: 3,
+  factoryProgressPollInterval: 3000,
+  factoryAutoSaveInterval: 30000,
+  factoryCrashRecovery: true,
   promptEnhanceSystemPrompt: "Expand the user's prompt into a detailed prose paragraph describing a video scene. Write in present tense. Describe what is seen and heard \u2014 the environment, lighting, textures, sounds, body language, and small physical details that make the scene feel real. If characters speak or discuss something, write the actual dialogue in quotation marks. Base everything on the user's prompt and reference images if provided \u2014 do not change the subject or setting, just flesh it out with rich, grounded detail. Output ONLY the scene description.",
 }
 

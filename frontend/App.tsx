@@ -4,6 +4,7 @@ import { ProjectProvider, useProjects } from './contexts/ProjectContext'
 import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
 import { AppSettingsProvider } from './contexts/AppSettingsContext'
 import { GenerationProvider } from './contexts/GenerationContext'
+import { FactoryProvider } from './contexts/FactoryContext'
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal'
 import { useBackend } from './hooks/use-backend'
 import { logger } from './lib/logger'
@@ -270,8 +271,10 @@ export default function App() {
       <KeyboardShortcutsProvider>
         <AppSettingsProvider>
           <GenerationProvider>
-            <AppContent />
-            <KeyboardShortcutsModal />
+            <FactoryProvider>
+              <AppContent />
+              <KeyboardShortcutsModal />
+            </FactoryProvider>
           </GenerationProvider>
         </AppSettingsProvider>
       </KeyboardShortcutsProvider>

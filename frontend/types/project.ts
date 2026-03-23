@@ -432,7 +432,7 @@ export interface Project {
 }
 
 export type ViewType = 'home' | 'project' | 'playground'
-export type ProjectTab = 'gen-space' | 'video-editor'
+export type ProjectTab = 'gen-space' | 'video-editor' | 'shot-factory'
 
 // Default tracks for new timelines
 export const DEFAULT_TRACKS: Track[] = [

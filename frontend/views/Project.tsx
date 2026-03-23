@@ -1,9 +1,10 @@
-import { ArrowLeft, Sparkles, Film } from 'lucide-react'
+import { ArrowLeft, Sparkles, Film, Zap } from 'lucide-react'
 import { useProjects } from '../contexts/ProjectContext'
 import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
 import { GenSpace } from './GenSpace'
 import { VideoEditor } from './VideoEditor'
+import { ShotFactory } from './ShotFactory'
 import type { ProjectTab } from '../types/project'
 
 export function Project() {
@@ -23,6 +24,7 @@ export function Project() {
   const tabs: { id: ProjectTab; label: string; icon: React.ReactNode }[] = [
     { id: 'gen-space', label: 'Gen Space', icon: <Sparkles className="h-4 w-4" /> },
     { id: 'video-editor', label: 'Video Editor', icon: <Film className="h-4 w-4" /> },
+    { id: 'shot-factory', label: 'Factory', icon: <Zap className="h-4 w-4" /> },
   ]
   
   return (
@@ -73,6 +75,9 @@ export function Project() {
         </div>
         <div className={`absolute inset-0 ${currentTab === 'video-editor' ? '' : 'invisible pointer-events-none'}`}>
           <VideoEditor />
+        </div>
+        <div className={`absolute inset-0 ${currentTab === 'shot-factory' ? '' : 'invisible pointer-events-none'}`}>
+          <ShotFactory />
         </div>
       </main>
     </div>
