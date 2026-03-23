@@ -33,6 +33,8 @@ interface ShotDetailProps {
   onSendToEditor: () => void
   onSendToEditorAndExport: () => void
   onImageDoubleClick?: () => void
+  autoRenderAll: boolean
+  onToggleAutoRender: () => void
 }
 
 function Section({
@@ -76,6 +78,8 @@ export function ShotDetail({
   onSendToEditor,
   onSendToEditorAndExport,
   onImageDoubleClick,
+  autoRenderAll,
+  onToggleAutoRender,
 }: ShotDetailProps) {
   const m = shot.manifest
   const activeFrame = shot.frameIterations[shot.activeFrameIndex]
@@ -444,6 +448,20 @@ export function ShotDetail({
           >
             Render Video
           </button>
+        </div>
+        <label className="flex items-center gap-2 px-1 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoRenderAll || !!shot.autoRenderVideo}
+            onChange={onToggleAutoRender}
+            disabled={autoRenderAll}
+            className="rounded border-zinc-600 bg-zinc-800 text-violet-500 h-3.5 w-3.5 disabled:opacity-50"
+          />
+          <span className="text-[11px] text-zinc-400">
+            {autoRenderAll ? 'Auto video gen (global)' : 'Auto video gen after frame'}
+          </span>
+        </label>
+        <div className="flex gap-2">
           <button
             onClick={onToggleEnabled}
             className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"

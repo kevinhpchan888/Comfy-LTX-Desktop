@@ -194,6 +194,7 @@ export interface FactoryShot {
   videoIterations: ShotIteration[]
   activeVideoIndex: number
   queueItemId?: string
+  autoRenderVideo?: boolean
 }
 
 export type FactoryPhase =

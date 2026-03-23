@@ -54,6 +54,9 @@ export function ShotFactory() {
     sendToEditor,
     sendToEditorAndExport,
     reorderShots,
+    autoRenderAll,
+    setAutoRenderAll,
+    toggleShotAutoRender,
   } = useFactory()
 
   const { settings, updateSettings } = useAppSettings()
@@ -245,6 +248,18 @@ export function ShotFactory() {
               onClick={renderAllVideos}
               disabled={stats.framesReady <= stats.rendered || isProcessing}
             />
+            {/* Auto-render toggle */}
+            <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] cursor-pointer hover:bg-zinc-800/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={autoRenderAll}
+                onChange={e => setAutoRenderAll(e.target.checked)}
+                className="rounded border-zinc-600 bg-zinc-800 text-violet-500 h-3.5 w-3.5"
+              />
+              <span className={autoRenderAll ? 'text-violet-300 font-medium' : 'text-zinc-400'}>
+                Auto Video Gen
+              </span>
+            </label>
             <ActionButton
               icon={<CheckCircle2 className="h-3.5 w-3.5" />}
               label={`Approved: ${stats.approved}`}
@@ -355,6 +370,8 @@ export function ShotFactory() {
               onSendToEditor={() => sendToEditor([selectedShot.manifest.id])}
               onSendToEditorAndExport={() => sendToEditorAndExport([selectedShot.manifest.id])}
               onImageDoubleClick={() => setLightboxShotId(selectedShot.manifest.id)}
+              autoRenderAll={autoRenderAll}
+              onToggleAutoRender={() => toggleShotAutoRender(selectedShot.manifest.id)}
             />
           </div>
         ) : (

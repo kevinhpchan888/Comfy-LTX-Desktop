@@ -81,6 +81,11 @@ interface FactoryContextType {
   sendToEditor: (shotIds: string[]) => Promise<void>
   sendToEditorAndExport: (shotIds: string[]) => Promise<void>
 
+  // Auto-render
+  autoRenderAll: boolean
+  setAutoRenderAll: (v: boolean) => void
+  toggleShotAutoRender: (id: string) => void
+
   // Stats
   stats: ReturnType<typeof getShotStats>
 }
@@ -169,6 +174,9 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   const [gpuInfo, setGpuInfo] = useState<GpuCapabilities | null>(null)
   const [gpuWarnings, setGpuWarnings] = useState<ValidationWarning[]>([])
 
+  // Auto-render after frame generation
+  const [autoRenderAll, setAutoRenderAll] = useState(false)
+
   // Creative Console
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isChatStreaming, setIsChatStreaming] = useState(false)
@@ -244,6 +252,12 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   const updateShot = useCallback((id: string, updates: Partial<FactoryShot>) => {
     setShots(prev => prev.map(s =>
       s.manifest.id === id ? { ...s, ...updates } : s
+    ))
+  }, [])
+
+  const toggleShotAutoRender = useCallback((id: string) => {
+    setShots(prev => prev.map(s =>
+      s.manifest.id === id ? { ...s, autoRenderVideo: !s.autoRenderVideo } : s
     ))
   }, [])
 
@@ -653,6 +667,26 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     setProgress(prev => ({ ...prev, completed: enabledShots.length, currentShotId: null }))
     setPhase(cancelledRef.current ? 'reviewing' : 'complete')
   }, [shots, renderVideo, settings.factoryDelayBetweenShots])
+
+  // Auto-render: when a shot transitions to frame-ready, auto-trigger video render
+  const prevShotStatusesRef = useRef<Map<string, string>>(new Map())
+  useEffect(() => {
+    const prevStatuses = prevShotStatusesRef.current
+    for (const shot of shots) {
+      const prevStatus = prevStatuses.get(shot.manifest.id)
+      if (
+        prevStatus !== 'frame-ready' &&
+        shot.status === 'frame-ready' &&
+        (autoRenderAll || shot.autoRenderVideo)
+      ) {
+        void renderVideo(shot.manifest.id)
+      }
+    }
+    // Update prev statuses
+    const next = new Map<string, string>()
+    for (const shot of shots) next.set(shot.manifest.id, shot.status)
+    prevShotStatusesRef.current = next
+  }, [shots, autoRenderAll, renderVideo])
 
   const approveIteration = useCallback((shotId: string, iterationIndex: number) => {
     setShots(prev => prev.map(s => {
@@ -1077,6 +1111,9 @@ ${JSON.stringify(manifest, null, 2)}`
     isChatStreaming,
     sendToEditor,
     sendToEditorAndExport,
+    autoRenderAll,
+    setAutoRenderAll,
+    toggleShotAutoRender,
     stats,
   }
 
