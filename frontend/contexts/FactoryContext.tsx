@@ -13,6 +13,9 @@ import type {
 } from '../types/factory'
 import { parseManifest, manifestToShots, getShotStats, parseDuration } from '../lib/factory-manifest'
 import { saveFrame, saveVideo, organizeOutputs } from '../lib/factory-files'
+import { copyToAssetFolder } from '../lib/asset-copy'
+import { DEFAULT_COLOR_CORRECTION } from '../types/project'
+import type { TimelineClip } from '../types/project'
 import { detectGpuCapabilities, validateAllShotsGpu } from '../lib/factory-gpu'
 import { createLLMService } from '../lib/llm-service'
 import type { LLMMessage } from '../lib/llm-service'
@@ -73,6 +76,9 @@ interface FactoryContextType {
   applyShotPreview: (messageId: string, previewIndex: number) => void
   isChatStreaming: boolean
 
+  // Send to Editor
+  sendToEditor: (shotIds: string[]) => Promise<void>
+
   // Stats
   stats: ReturnType<typeof getShotStats>
 }
@@ -92,7 +98,7 @@ const INITIAL_PROGRESS: FactoryProgress = {
 
 export function FactoryProvider({ children }: { children: React.ReactNode }) {
   const { addToQueue, queue } = useGeneration()
-  const { currentProject } = useProjects()
+  const { currentProject, currentProjectId, addAsset, getActiveTimeline, updateTimeline, setCurrentTab } = useProjects()
   const { settings } = useAppSettings()
 
   // Manifest & shots
@@ -596,6 +602,84 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     return result
   }, [shots, getProjectPath])
 
+  // ─── Send to Editor ─────────────────────────────────────────────────────
+
+  const sendToEditor = useCallback(async (shotIds: string[]) => {
+    if (!currentProjectId || !currentProject) return
+
+    const shotsToSend = shots.filter(s =>
+      shotIds.includes(s.manifest.id) && s.videoIterations.length > 0
+    )
+    if (shotsToSend.length === 0) return
+
+    const assetSavePath = currentProject.assetSavePath || undefined
+    const newAssets = []
+
+    for (const shot of shotsToSend) {
+      const activeVideo = shot.videoIterations[shot.activeVideoIndex]
+      if (!activeVideo) continue
+
+      const { path: finalPath, url: finalUrl } = await copyToAssetFolder(
+        activeVideo.path, activeVideo.url, assetSavePath,
+      )
+      const asset = addAsset(currentProjectId, {
+        type: 'video',
+        path: finalPath,
+        url: finalUrl,
+        prompt: shot.manifest.video.prompt,
+        resolution: shot.manifest.video.resolution || '',
+        duration: parseDuration(shot.manifest.video.duration),
+      })
+      newAssets.push(asset)
+    }
+
+    if (newAssets.length === 0) return
+
+    const timeline = getActiveTimeline(currentProjectId)
+    if (!timeline) return
+
+    const videoTrackIndex = timeline.tracks.findIndex(t => t.kind === 'video' && !t.locked)
+    const targetTrack = videoTrackIndex >= 0 ? videoTrackIndex : 0
+
+    const trackClips = timeline.clips.filter(c => c.trackIndex === targetTrack)
+    let nextStart = trackClips.reduce((max, clip) =>
+      Math.max(max, clip.startTime + clip.duration), 0,
+    )
+
+    const newClips: TimelineClip[] = newAssets.map(asset => {
+      const clipDuration = asset.duration || 5
+      const clip: TimelineClip = {
+        id: `clip-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        assetId: asset.id,
+        type: 'video',
+        startTime: nextStart,
+        duration: clipDuration,
+        trimStart: 0,
+        trimEnd: 0,
+        speed: 1,
+        reversed: false,
+        muted: false,
+        volume: 1,
+        trackIndex: targetTrack,
+        asset,
+        flipH: false,
+        flipV: false,
+        transitionIn: { type: 'none', duration: 0 },
+        transitionOut: { type: 'none', duration: 0 },
+        colorCorrection: DEFAULT_COLOR_CORRECTION,
+        opacity: 100,
+      }
+      nextStart += clipDuration
+      return clip
+    })
+
+    updateTimeline(currentProjectId, timeline.id, {
+      clips: [...timeline.clips, ...newClips],
+    })
+
+    setCurrentTab('video-editor')
+  }, [shots, currentProjectId, currentProject, addAsset, getActiveTimeline, updateTimeline, setCurrentTab])
+
   // ─── GPU ─────────────────────────────────────────────────────────────────
 
   const refreshGpuInfo = useCallback(async () => {
@@ -819,6 +903,7 @@ ${JSON.stringify(manifest, null, 2)}`
     sendChatMessage,
     applyShotPreview,
     isChatStreaming,
+    sendToEditor,
     stats,
   }
 

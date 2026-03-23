@@ -15,6 +15,7 @@ import {
   Eye,
   Trash2,
   Pencil,
+  Send,
 } from 'lucide-react'
 import type { FactoryShot, ManifestShot, ValidationWarning } from '../../types/factory'
 import { parseDuration } from '../../lib/factory-manifest'
@@ -29,6 +30,7 @@ interface ShotDetailProps {
   onToggleEnabled: () => void
   onUpdateManifest: (updates: Partial<ManifestShot>) => void
   onDelete: () => void
+  onSendToEditor: () => void
 }
 
 function Section({
@@ -69,6 +71,7 @@ export function ShotDetail({
   onToggleEnabled,
   onUpdateManifest,
   onDelete,
+  onSendToEditor,
 }: ShotDetailProps) {
   const m = shot.manifest
   const activeFrame = shot.frameIterations[shot.activeFrameIndex]
@@ -401,7 +404,7 @@ export function ShotDetail({
       </Section>
 
       {/* Actions */}
-      <div className="mt-auto border-t border-zinc-800 p-4">
+      <div className="mt-auto border-t border-zinc-800 p-4 space-y-2">
         <div className="flex gap-2">
           <button
             onClick={onGenerateFrame}
@@ -434,6 +437,16 @@ export function ShotDetail({
             )}
           </button>
         </div>
+        {/* Send to Editor — only available when shot has rendered video */}
+        {shot.videoIterations.length > 0 && (
+          <button
+            onClick={onSendToEditor}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-green-500"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Send to Video Editor
+          </button>
+        )}
       </div>
     </div>
   )

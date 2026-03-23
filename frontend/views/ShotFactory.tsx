@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   Image, Play, CheckCircle2, FolderOutput,
   Settings, MessageSquare, AlertTriangle,
-  Plus, Trash2, CheckSquare, X,
+  Plus, Trash2, CheckSquare, X, Send,
 } from 'lucide-react'
 import { useFactory } from '../contexts/FactoryContext'
 import { ManifestImporter } from '../components/factory/ManifestImporter'
@@ -50,6 +50,7 @@ export function ShotFactory() {
     deselectAllShots,
     deleteShots,
     addNewShot,
+    sendToEditor,
   } = useFactory()
 
   const { settings, updateSettings } = useAppSettings()
@@ -132,6 +133,13 @@ export function ShotFactory() {
             >
               <CheckSquare className="h-3 w-3" />
               Select All
+            </button>
+            <button
+              onClick={() => sendToEditor([...selectedShotIds])}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-green-400 transition-colors hover:bg-green-500/10"
+            >
+              <Send className="h-3 w-3" />
+              Send to Editor
             </button>
             <button
               onClick={() => deleteShots([...selectedShotIds])}
@@ -306,6 +314,7 @@ export function ShotFactory() {
               onToggleEnabled={() => toggleShotEnabled(selectedShot.manifest.id)}
               onUpdateManifest={(updates) => updateShotManifest(selectedShot.manifest.id, updates)}
               onDelete={() => deleteShots([selectedShot.manifest.id])}
+              onSendToEditor={() => sendToEditor([selectedShot.manifest.id])}
             />
           </div>
         ) : (
