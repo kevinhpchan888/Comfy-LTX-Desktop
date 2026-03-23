@@ -280,7 +280,9 @@ export function registerComfyUIHandlers(): void {
       const outputDir = settings.comfyuiOutputDir || path.join(app.getPath('documents'), 'ComfyUI', 'output')
 
       // 7. Submit to ComfyUI
-      logger.info('Submitting workflow to ComfyUI...')
+      // Log all node class_types in the workflow for debugging
+      const nodeClasses = Object.entries(workflow).map(([id, node]) => `${id}:${(node as { class_type?: string })?.class_type}`).join(', ')
+      logger.info(`Submitting workflow nodes: ${nodeClasses}`)
       const result = await comfyClient.submitWorkflow(workflow, clientId)
       activePromptId = result.prompt_id
       logger.info(`Workflow submitted, promptId: ${result.prompt_id}`)
@@ -423,6 +425,14 @@ export function registerComfyUIHandlers(): void {
         error instanceof Error ? error.message : 'Unknown generation error'
       if (message === 'Generation cancelled') {
         return { status: 'cancelled' }
+      }
+      // nvvfx / RTX Super Resolution not installed — this is expected, workflow should not use it
+      if (message.includes('nvvfx') || message.includes('NVIDIA Video Effects')) {
+        logger.error(`ComfyUI generation failed (nvvfx): ${message}`)
+        return {
+          status: 'error',
+          error: 'Generation failed because a workflow node requires the NVIDIA Video Effects SDK (nvvfx). Please report this as a bug — RSRTXSuperResolution nodes should have been removed from the workflow.',
+        }
       }
       // If ComfyUI reports a missing custom node, tell the user to restart ComfyUI
       if (message.includes('missing_node_type') || message.includes('not found. The custom node may not be installed')) {
