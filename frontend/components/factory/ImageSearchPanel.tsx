@@ -306,7 +306,12 @@ function GoogleTab({ defaultQuery }: { defaultQuery: string }) {
 
   const openGoogleImages = () => {
     const searchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`
-    window.open(searchUrl, '_blank')
+    // Use system browser via Electron shell.openExternal to avoid Google bot-detection
+    if (window.electronAPI?.openExternalUrl) {
+      void window.electronAPI.openExternalUrl(searchUrl)
+    } else {
+      window.open(searchUrl, '_blank')
+    }
   }
 
   return (

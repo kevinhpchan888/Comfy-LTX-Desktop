@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Open specific app pages / folders
   openLtxApiKeyPage: (): Promise<boolean> => ipcRenderer.invoke('open-ltx-api-key-page'),
   openFalApiKeyPage: (): Promise<boolean> => ipcRenderer.invoke('open-fal-api-key-page'),
+  openExternalUrl: (url: string): Promise<void> => ipcRenderer.invoke('open-external-url', url),
   openParentFolderOfFile: (filePath: string): Promise<void> => ipcRenderer.invoke('open-parent-folder-of-file', filePath),
 
   // Reveal a specific file in the OS file manager (Explorer/Finder)
@@ -227,6 +228,7 @@ declare global {
       getDiskSpace: (dirPath: string) => Promise<{ freeBytes: number }>
       onSetupProgress: (callback: (_event: unknown, data: Record<string, unknown>) => void) => () => void
       openLtxApiKeyPage: () => Promise<boolean>
+      openExternalUrl: (url: string) => Promise<void>
       openParentFolderOfFile: (filePath: string) => Promise<void>
       showItemInFolder: (filePath: string) => Promise<void>
       getLogs: () => Promise<LogsResponse>

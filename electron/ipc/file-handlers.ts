@@ -70,6 +70,15 @@ export function registerFileHandlers(): void {
     return true
   })
 
+  ipcMain.handle('open-external-url', async (_event, url: string) => {
+    // Only allow http/https URLs for security
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      throw new Error('Only http/https URLs are allowed')
+    }
+    const { shell } = await import('electron')
+    await shell.openExternal(url)
+  })
+
   ipcMain.handle('open-fal-api-key-page', async () => {
     const { shell } = await import('electron')
     await shell.openExternal('https://fal.ai/dashboard/keys')

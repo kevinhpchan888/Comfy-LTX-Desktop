@@ -34,6 +34,7 @@ interface Window {
     onSetupProgress: (callback: (_event: unknown, data: Record<string, unknown>) => void) => () => void
     openLtxApiKeyPage: () => Promise<boolean>
     openFalApiKeyPage: () => Promise<boolean>
+    openExternalUrl: (url: string) => Promise<void>
     openParentFolderOfFile: (filePath: string) => Promise<void>
     showItemInFolder: (filePath: string) => Promise<void>
     getLogs: () => Promise<LogsResponse>
