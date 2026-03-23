@@ -242,9 +242,9 @@ export function ShotFactory() {
           <div className="px-3 py-3 border-t border-zinc-800 space-y-1.5">
             <ActionButton
               icon={<Image className="h-3.5 w-3.5" />}
-              label={`Generate Images (${stats.idle})`}
+              label={`Generate Images (${stats.idle + stats.errors})`}
               onClick={generateAllFrames}
-              disabled={stats.idle === 0 || isProcessing}
+              disabled={(stats.idle + stats.errors) === 0}
             />
             <ActionButton
               icon={<Play className="h-3.5 w-3.5" />}

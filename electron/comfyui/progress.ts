@@ -35,6 +35,7 @@ export class ComfyUIProgressTracker {
   private activePromptId: string | null = null
   private completionResolve: ((value: GenerationProgress) => void) | null = null
   private completionReject: ((reason: Error) => void) | null = null
+  private intentionalDisconnect = false
 
   private stageIndex = 0
   private lastValue: number | null = null
@@ -73,6 +74,7 @@ export class ComfyUIProgressTracker {
     this.progress = { ...INITIAL_PROGRESS }
     this.stageIndex = 0
     this.lastValue = null
+    this.intentionalDisconnect = false
 
     const wsUrl = `${this.baseUrl}/ws?clientId=${clientId}`
     logger.info(`ComfyUI WebSocket connecting to ${wsUrl}`)
@@ -95,14 +97,15 @@ export class ComfyUIProgressTracker {
 
     this.ws.on('close', () => {
       logger.info('ComfyUI WebSocket closed')
-      // If we're still waiting for completion, reject the promise
-      if (this.completionResolve) {
+      // Only reject if this was an unexpected close (not our own disconnect())
+      if (!this.intentionalDisconnect && this.completionResolve) {
         this.rejectCompletion(new Error('WebSocket connection closed before generation completed'))
       }
     })
   }
 
   disconnect(): void {
+    this.intentionalDisconnect = true
     if (this.ws) {
       try {
         this.ws.close()

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Cpu, Zap, Settings2, Brain, Timer,
-  CheckCircle2, XCircle, Loader2, RefreshCw,
+  CheckCircle2, XCircle, Loader2, RefreshCw, Cloud, ExternalLink,
 } from 'lucide-react'
 import type { AppSettings } from '../../contexts/AppSettingsContext'
 import type { GpuCapabilities } from '../../types/factory'
@@ -249,6 +249,11 @@ export function FactorySettings({
           </FieldGroup>
 
           <div className="border-t border-zinc-800 pt-4 mt-2">
+            <h4 className="text-sm font-medium text-zinc-300 mb-3">Video Generation Engine</h4>
+            <LtxApiSettings />
+          </div>
+
+          <div className="border-t border-zinc-800 pt-4 mt-2">
             <h4 className="text-sm font-medium text-zinc-300 mb-3">Image Sources</h4>
             <FieldGroup label="Pexels API Key">
               <input
@@ -448,6 +453,147 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
     <div>
       <label className="block text-xs font-medium text-zinc-400 mb-1">{label}</label>
       {children}
+    </div>
+  )
+}
+
+// ─── LTX Cloud API Settings ─────────────────────────────────────────────────
+
+interface BackendSettings {
+  has_ltx_api_key?: boolean
+  user_prefers_ltx_api_video_generations?: boolean
+}
+
+function LtxApiSettings() {
+  const [backendSettings, setBackendSettings] = useState<BackendSettings | null>(null)
+  const [apiKey, setApiKey] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const resp = await fetch('http://localhost:8000/api/settings')
+      if (resp.ok) {
+        const data = await resp.json()
+        setBackendSettings(data)
+      }
+    } catch {
+      // Backend not running
+    }
+  }, [])
+
+  useEffect(() => { void fetchSettings() }, [fetchSettings])
+
+  const updateBackendSetting = async (patch: Record<string, unknown>) => {
+    setSaving(true)
+    setStatus('idle')
+    try {
+      const resp = await fetch('http://localhost:8000/api/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (resp.ok) {
+        setStatus('saved')
+        await fetchSettings()
+      } else {
+        setStatus('error')
+      }
+    } catch {
+      setStatus('error')
+    } finally {
+      setSaving(false)
+      setTimeout(() => setStatus('idle'), 2000)
+    }
+  }
+
+  const handleSaveApiKey = () => {
+    if (!apiKey.trim()) return
+    void updateBackendSetting({ ltx_api_key: apiKey.trim() })
+    setApiKey('')
+  }
+
+  const handleTogglePrefer = (checked: boolean) => {
+    void updateBackendSetting({ user_prefers_ltx_api_video_generations: checked })
+  }
+
+  const hasKey = backendSettings?.has_ltx_api_key ?? false
+  const prefersApi = backendSettings?.user_prefers_ltx_api_video_generations ?? false
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Cloud className="h-4 w-4 text-blue-400" />
+          <span className="text-xs font-medium text-blue-300">LTX Video Cloud API</span>
+        </div>
+        <p className="text-[10px] text-zinc-400 leading-relaxed">
+          Generate videos in the cloud using the LTX Video API instead of local ComfyUI.
+          No GPU required. Get an API key at{' '}
+          <button
+            onClick={() => window.electronAPI.openLtxApiKeyPage()}
+            className="text-blue-400 hover:underline inline-flex items-center gap-0.5"
+          >
+            console.ltx.video <ExternalLink className="h-2.5 w-2.5" />
+          </button>
+        </p>
+      </div>
+
+      {backendSettings === null ? (
+        <p className="text-[11px] text-zinc-500">Loading backend settings...</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-400">API Key</span>
+              {hasKey ? (
+                <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">Configured</span>
+              ) : (
+                <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">Not set</span>
+              )}
+            </div>
+            {saving && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
+            {status === 'saved' && <CheckCircle2 className="h-3 w-3 text-green-400" />}
+            {status === 'error' && <XCircle className="h-3 w-3 text-red-400" />}
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              placeholder={hasKey ? '••••••••  (update key)' : 'Enter LTX API key'}
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600"
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey() }}
+            />
+            <button
+              onClick={handleSaveApiKey}
+              disabled={!apiKey.trim() || saving}
+              className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
+            >
+              Save
+            </button>
+          </div>
+
+          <label className="flex items-center gap-2.5 cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={prefersApi}
+              onChange={e => handleTogglePrefer(e.target.checked)}
+              disabled={!hasKey}
+              className="rounded border-zinc-600 bg-zinc-800 text-blue-500 h-4 w-4 disabled:opacity-50"
+            />
+            <div>
+              <span className="text-sm text-zinc-300">Use LTX Cloud API for video generation</span>
+              <p className="text-[10px] text-zinc-500">
+                {prefersApi
+                  ? 'Videos will be generated in the cloud (no local GPU needed)'
+                  : 'Videos will be generated locally via ComfyUI'}
+              </p>
+            </div>
+          </label>
+        </>
+      )}
     </div>
   )
 }
