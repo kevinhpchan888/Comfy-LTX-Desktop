@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, AlertCircle, Settings, FileText, X, RefreshCw } from 'lucide-react'
+import { Loader2, AlertCircle, Settings, FileText, X, RefreshCw, Play } from 'lucide-react'
 import { ProjectProvider, useProjects } from './contexts/ProjectContext'
 import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
 import { AppSettingsProvider } from './contexts/AppSettingsContext'
@@ -16,6 +16,55 @@ import { LogViewer } from './components/LogViewer'
 import { Button } from './components/ui/button'
 
 type SetupState = 'loading' | { needsSetup: boolean; needsLicense: boolean }
+
+function ComfyUINotConnected({ error }: { error: string }) {
+  const [isLaunching, setIsLaunching] = useState(false)
+  const [launchError, setLaunchError] = useState<string | null>(null)
+
+  const handleLaunch = async () => {
+    setIsLaunching(true)
+    setLaunchError(null)
+    try {
+      const result = await window.electronAPI.launchComfyUI()
+      if (result.success) {
+        window.location.reload()
+      } else {
+        setLaunchError(result.error || 'Failed to launch ComfyUI')
+        setIsLaunching(false)
+      }
+    } catch {
+      setLaunchError('Failed to launch ComfyUI')
+      setIsLaunching(false)
+    }
+  }
+
+  return (
+    <div className="h-screen bg-background flex items-center justify-center">
+      <div className="text-center max-w-md">
+        <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+        <h2 className="text-xl font-semibold text-foreground mb-2">Cannot Connect to ComfyUI</h2>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        {launchError && (
+          <p className="text-red-400 text-sm mb-4">{launchError}</p>
+        )}
+        {isLaunching ? (
+          <div className="flex items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Launching ComfyUI...</span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-3">
+            <Button onClick={handleLaunch}>
+              <Play className="h-4 w-4 mr-2" />
+              Launch ComfyUI
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function AppContent() {
   const { currentView } = useProjects()
@@ -118,17 +167,7 @@ function AppContent() {
   }
 
   if (backendError && !status.connected) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-foreground mb-2">Cannot Connect to ComfyUI</h2>
-          <p className="text-muted-foreground mb-4">{backendError}</p>
-          <p className="text-muted-foreground text-sm mb-4">Make sure ComfyUI Desktop is running on port 8188.</p>
-          <Button onClick={() => window.location.reload()}>Retry</Button>
-        </div>
-      </div>
-    )
+    return <ComfyUINotConnected error={backendError} />
   }
 
   if (setupState.needsLicense) {

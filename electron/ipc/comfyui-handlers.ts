@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { spawnSync } from 'child_process'
 import { comfyClient } from '../comfyui/client'
+import { launchComfyUI } from '../comfyui/launcher'
 import { progressTracker } from '../comfyui/progress'
 import {
   buildWorkflow,
@@ -478,6 +479,26 @@ export function registerComfyUIHandlers(): void {
   ipcMain.handle('comfyui:health', async () => {
     const connected = await comfyClient.checkHealth()
     return { connected }
+  })
+
+  ipcMain.handle('comfyui:launch', async () => {
+    const settings = getComfyUISettings()
+    if (!settings.comfyuiPath) {
+      return { success: false, error: 'ComfyUI path not configured' }
+    }
+    const started = launchComfyUI(settings.comfyuiPath)
+    if (!started) {
+      return { success: false, error: 'Failed to start ComfyUI. Check logs for details.' }
+    }
+    // Poll until ComfyUI is ready (up to 60s)
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      const ok = await comfyClient.checkHealth()
+      if (ok) {
+        return { success: true }
+      }
+    }
+    return { success: false, error: 'ComfyUI started but did not become reachable within 60 seconds.' }
   })
 
   ipcMain.handle('comfyui:model-lists', async () => {

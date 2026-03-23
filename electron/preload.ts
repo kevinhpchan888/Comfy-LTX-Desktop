@@ -127,6 +127,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelGeneration: (): Promise<void> => ipcRenderer.invoke('comfyui:cancel'),
   checkComfyUIHealth: (): Promise<{ connected: boolean }> =>
     ipcRenderer.invoke('comfyui:health'),
+  launchComfyUI: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('comfyui:launch'),
   getModelLists: (): Promise<{ checkpoints: string[]; textEncoders: string[]; upscaleModels: string[]; loras: string[]; samplers: string[] }> =>
     ipcRenderer.invoke('comfyui:model-lists'),
   readVideoMetadata: (filePath: string): Promise<Record<string, unknown> | null> =>
@@ -266,6 +268,7 @@ declare global {
       }>
       cancelGeneration: () => Promise<void>
       checkComfyUIHealth: () => Promise<{ connected: boolean }>
+      launchComfyUI: () => Promise<{ success: boolean; error?: string }>
       getModelLists: () => Promise<{ checkpoints: string[]; textEncoders: string[]; upscaleModels: string[]; loras: string[]; samplers: string[] }>
       readVideoMetadata: (filePath: string) => Promise<Record<string, unknown> | null>
       getProjectRenders: (projectName: string) => Promise<Array<{

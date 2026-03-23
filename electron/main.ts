@@ -16,6 +16,7 @@ import { initAutoUpdater } from './updater'
 import { createWindow, getMainWindow } from './window'
 import { checkAndRepairNodes, installRsNodes } from './comfyui/rs-nodes-installer'
 import { comfyClient } from './comfyui/client'
+import { launchComfyUI, stopComfyUI } from './comfyui/launcher'
 import { getComfyUISettings } from './ipc/settings-handlers'
 import { detectGpu } from './gpu'
 import { logger } from './logger'
@@ -65,10 +66,30 @@ if (!gotLock) {
     // Detect GPU capabilities (cached for workflow builder)
     detectGpu().catch(err => logger.warn(`GPU detection failed: ${err}`))
 
-    // Auto-discover ComfyUI port at startup
-    comfyClient.checkHealth().then(connected => {
+    // Auto-discover ComfyUI port at startup; launch it if not running
+    comfyClient.checkHealth().then(async (connected) => {
       if (connected) {
         logger.info(`ComfyUI connected at ${comfyClient.getBaseUrl()}`)
+        return
+      }
+
+      // ComfyUI not running — try to launch it
+      const settings = getComfyUISettings()
+      if (settings.comfyuiPath) {
+        logger.info('ComfyUI not detected — attempting auto-launch...')
+        const started = launchComfyUI(settings.comfyuiPath)
+        if (started) {
+          // Poll until ComfyUI is ready (up to 60s)
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 2000))
+            const ok = await comfyClient.checkHealth()
+            if (ok) {
+              logger.info(`ComfyUI auto-launched and connected at ${comfyClient.getBaseUrl()}`)
+              return
+            }
+          }
+          logger.warn('ComfyUI was launched but did not become reachable within 60s')
+        }
       }
     }).catch(() => {})
 
@@ -135,5 +156,6 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     stopExportProcess()
+    stopComfyUI()
   })
 }
