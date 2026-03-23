@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { Select } from './ui/select'
 import type { GenerationMode } from './ModeTabs'
 
@@ -45,15 +44,6 @@ export function SettingsPanel({
   hideDuration = false,
   hideIterations = false,
 }: SettingsPanelProps) {
-  const [hasRtxSuperRes, setHasRtxSuperRes] = useState(false)
-  useEffect(() => {
-    window.electronAPI?.getModelLists?.()
-      .then((lists: { hasRtxSuperRes?: boolean }) => {
-        if (lists.hasRtxSuperRes) setHasRtxSuperRes(true)
-      })
-      .catch(() => {})
-  }, [])
-
   const isImageMode = mode === 'text-to-image'
   const handleChange = (key: keyof GenerationSettings, value: string | number | boolean) => {
     const nextSettings = { ...settings, [key]: value } as GenerationSettings
@@ -62,7 +52,7 @@ export function SettingsPanel({
 
   const maxDuration = settings.temporalUpscale ? 40 : 20
   const durationOptions = [5, 6, 8, 10, 12, 15, 18, 20, 30, 40].filter(d => d <= maxDuration)
-  const resolutionOptions = hasRtxSuperRes ? ['4K', '1080p', '720p', '540p'] : ['1080p', '720p', '540p']
+  const resolutionOptions = ['4K', '1080p', '720p', '540p']
   const fpsOptions = [24, 25, 30, 50, 60]
 
   // Image mode settings

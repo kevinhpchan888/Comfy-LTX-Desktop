@@ -587,11 +587,24 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
   // Build the chain: each stage feeds images to the next
   let lastImageSource: [string, number] = ['6', 2] // RSLTXVGenerate images output
 
-  // RTX Video Super Resolution (4K upscale)
-  if (params.rtxSuperRes && workflow[OPTIONAL_NODE_IDS.rtxSuperRes]) {
-    const rtxNode = workflow[OPTIONAL_NODE_IDS.rtxSuperRes]
-    rtxNode.inputs['images'] = lastImageSource
-    lastImageSource = [OPTIONAL_NODE_IDS.rtxSuperRes, 0]
+  // 4K upscale (2x resolution)
+  if (params.rtxSuperRes) {
+    // Use lanczos 2x upscale — works on all GPUs without extra SDK installs.
+    // If RSRTXSuperResolution was in the template, remove it.
+    delete workflow[OPTIONAL_NODE_IDS.rtxSuperRes]
+    const upscaleId = '_4k_upscale'
+    workflow[upscaleId] = {
+      class_type: 'ImageScale',
+      inputs: {
+        upscale_method: 'lanczos',
+        width: params.width * 2,
+        height: params.height * 2,
+        crop: 'disabled',
+        image: lastImageSource,
+      },
+      _meta: { title: '4K Upscale' },
+    }
+    lastImageSource = [upscaleId, 0]
   }
 
   // Film grain
