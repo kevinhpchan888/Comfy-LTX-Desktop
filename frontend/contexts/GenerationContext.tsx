@@ -61,10 +61,13 @@ export interface GenerationContextType extends GenerationState {
   queue: QueueItem[]
   addToQueue: (params: QueueItemParams) => void
   removeFromQueue: (id: string) => void
+  reorderQueue: (fromIndex: number, toIndex: number) => void
   clearQueue: () => void
   cancelQueue: () => void
   isProcessingQueue: boolean
   queuePosition: number // 0-based index of currently processing item, -1 if not processing
+  /** Returns completed video/image paths from the queue in order */
+  getCompletedResults: () => Array<{ path: string; url: string; type: 'video' | 'image'; prompt: string }>
 }
 
 const GenerationContext = createContext<GenerationContextType | null>(null)
@@ -406,6 +409,27 @@ export function GenerationProvider({ children }: { children: React.ReactNode }) 
     setQueue(prev => prev.filter(item => item.id !== id))
   }, [])
 
+  const reorderQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
+  const getCompletedResults = useCallback(() => {
+    return queue
+      .filter(item => item.status === 'complete')
+      .map(item => ({
+        path: item.videoPath || '',
+        url: item.videoUrl || item.imageUrl || '',
+        type: item.params.type,
+        prompt: item.params.prompt,
+      }))
+      .filter(item => item.url !== '')
+  }, [queue])
+
   const clearQueue = useCallback(() => {
     if (processingQueueRef.current) {
       queueCancelledRef.current = true
@@ -669,10 +693,12 @@ export function GenerationProvider({ children }: { children: React.ReactNode }) 
       queue,
       addToQueue,
       removeFromQueue,
+      reorderQueue,
       clearQueue,
       cancelQueue,
       isProcessingQueue,
       queuePosition,
+      getCompletedResults,
     }}>
       {children}
     </GenerationContext.Provider>

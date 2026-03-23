@@ -13,7 +13,8 @@ import { useGeneration } from '../contexts/GenerationContext'
 import type { QueueItem, QueueItemParams } from '../contexts/GenerationContext'
 import { useRetake } from '../hooks/use-retake'
 import { useAppSettings } from '../contexts/AppSettingsContext'
-import type { Asset } from '../types/project'
+import type { Asset, TimelineClip } from '../types/project'
+import { DEFAULT_COLOR_CORRECTION } from '../types/project'
 import { GenerationErrorDialog } from '../components/GenerationErrorDialog'
 import { SettingsPanel, type GenerationSettings } from '../components/SettingsPanel'
 import { ModeTabs, type GenerationMode } from '../components/ModeTabs'
@@ -289,20 +290,28 @@ function AspectIcon({ className }: { className?: string }) {
 function BatchQueuePanel({
   queue,
   onRemove,
+  onReorder,
   onClear,
   onCancel,
+  onSendToEditor,
   isProcessing,
 }: {
   queue: QueueItem[]
   onRemove: (id: string) => void
+  onReorder: (fromIndex: number, toIndex: number) => void
   onClear: () => void
   onCancel: () => void
+  onSendToEditor: () => void
   isProcessing: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const activeCount = queue.filter(q => q.status === 'pending' || q.status === 'generating').length
   const completedCount = queue.filter(q => q.status === 'complete').length
   const errorCount = queue.filter(q => q.status === 'error').length
+  const hasCompleted = completedCount > 0
+  const allDone = activeCount === 0 && queue.length > 0
 
   const statusIcon = (status: QueueItem['status']) => {
     switch (status) {
@@ -314,8 +323,46 @@ function BatchQueuePanel({
     }
   }
 
+  const canDrag = (item: QueueItem) => item.status === 'pending'
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!canDrag(queue[index])) { e.preventDefault(); return }
+    setDragIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (dragIndex === null) return
+    // Only allow dropping onto pending items or after all non-pending items
+    if (queue[index].status !== 'pending' && queue[index].status !== 'complete' && queue[index].status !== 'error' && queue[index].status !== 'cancelled') return
+    setDragOverIndex(index)
+  }
+
+  const handleDrop = (e: React.DragEvent, toIndex: number) => {
+    e.preventDefault()
+    if (dragIndex !== null && dragIndex !== toIndex) {
+      onReorder(dragIndex, toIndex)
+    }
+    setDragIndex(null)
+    setDragOverIndex(null)
+  }
+
+  const handleDragEnd = () => {
+    setDragIndex(null)
+    setDragOverIndex(null)
+  }
+
+  // Move a pending item up or down via arrow buttons
+  const moveItem = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= queue.length) return
+    onReorder(index, targetIndex)
+  }
+
   return (
-    <div className="absolute bottom-[130px] right-4 w-[340px] z-20">
+    <div className="absolute bottom-[130px] right-4 w-[360px] z-20">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
         <button
@@ -336,17 +383,56 @@ function BatchQueuePanel({
         {expanded && (
           <>
             {/* Queue items */}
-            <div className="max-h-[240px] overflow-y-auto border-t border-zinc-800/60">
+            <div className="max-h-[280px] overflow-y-auto border-t border-zinc-800/60">
               {queue.map((item, index) => (
                 <div
                   key={item.id}
-                  className={`flex items-start gap-2 px-4 py-2.5 border-b border-zinc-800/40 ${
+                  draggable={canDrag(item)}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex items-start gap-2 px-3 py-2.5 border-b border-zinc-800/40 transition-colors ${
                     item.status === 'generating' ? 'bg-violet-500/5' : ''
-                  }`}
+                  } ${dragOverIndex === index && dragIndex !== index ? 'border-t-2 border-t-violet-500' : ''}
+                  ${dragIndex === index ? 'opacity-40' : ''}
+                  ${canDrag(item) ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 >
-                  <div className="mt-0.5 flex-shrink-0">
-                    {statusIcon(item.status)}
+                  {/* Drag handle + reorder arrows for pending items */}
+                  <div className="flex flex-col items-center gap-0.5 mt-0.5 flex-shrink-0">
+                    {canDrag(item) ? (
+                      <>
+                        <button
+                          onClick={() => moveItem(index, 'up')}
+                          disabled={index === 0 || queue[index - 1]?.status === 'generating'}
+                          className="p-0 text-zinc-600 hover:text-zinc-400 disabled:text-zinc-800 disabled:cursor-default transition-colors"
+                          title="Move up"
+                        >
+                          <ChevronUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => moveItem(index, 'down')}
+                          disabled={index === queue.length - 1}
+                          className="p-0 text-zinc-600 hover:text-zinc-400 disabled:text-zinc-800 disabled:cursor-default transition-colors"
+                          title="Move down"
+                        >
+                          <ChevronUp className="h-3 w-3 rotate-180" />
+                        </button>
+                      </>
+                    ) : (
+                      <div className="mt-0.5">
+                        {statusIcon(item.status)}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Status icon for pending items shown separately */}
+                  {canDrag(item) && (
+                    <div className="mt-1 flex-shrink-0">
+                      {statusIcon(item.status)}
+                    </div>
+                  )}
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] uppercase font-medium text-zinc-600">
@@ -384,15 +470,32 @@ function BatchQueuePanel({
               >
                 Clear All
               </button>
-              {isProcessing && (
-                <button
-                  onClick={onCancel}
-                  className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 transition-colors"
-                >
-                  <Square className="h-3 w-3" />
-                  Stop Queue
-                </button>
-              )}
+
+              <div className="flex items-center gap-3">
+                {isProcessing && (
+                  <button
+                    onClick={onCancel}
+                    className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    <Square className="h-3 w-3" />
+                    Stop Queue
+                  </button>
+                )}
+                {hasCompleted && (
+                  <button
+                    onClick={onSendToEditor}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                      allDone
+                        ? 'bg-violet-600 text-white hover:bg-violet-500'
+                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                    title="Send completed videos to the editor timeline"
+                  >
+                    <Film className="h-3 w-3" />
+                    Send to Editor
+                  </button>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -755,7 +858,7 @@ const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
 }
 
 export function GenSpace() {
-  const { currentProject, currentProjectId, addAsset, addTakeToAsset, deleteAsset, toggleFavorite, syncGeneratedAssets, genSpaceEditImageUrl, setGenSpaceEditImageUrl, setGenSpaceEditMode, genSpaceRetakeSource, setGenSpaceRetakeSource, setPendingRetakeUpdate, updateProjectGenerationSettings } = useProjects()
+  const { currentProject, currentProjectId, addAsset, addTakeToAsset, deleteAsset, toggleFavorite, syncGeneratedAssets, genSpaceEditImageUrl, setGenSpaceEditImageUrl, setGenSpaceEditMode, genSpaceRetakeSource, setGenSpaceRetakeSource, setPendingRetakeUpdate, updateProjectGenerationSettings, setCurrentTab, getActiveTimeline, updateTimeline } = useProjects()
   const { settings: appSettings, updateSettings: updateAppSettings } = useAppSettings()
   const [mode, setMode] = useState<'video' | 'retake'>('video')
   const [genMode, setGenMode] = useState<GenerationMode>('text-to-video')
@@ -815,9 +918,11 @@ export function GenSpace() {
     queue,
     addToQueue,
     removeFromQueue,
+    reorderQueue,
     clearQueue,
     cancelQueue,
     isProcessingQueue,
+    getCompletedResults,
   } = useGeneration()
 
   const {
@@ -1195,6 +1300,81 @@ export function GenSpace() {
     addToQueue(params)
     // Clear prompt for next entry but keep settings/images
     setPrompt('')
+  }
+
+  const handleSendToEditor = async () => {
+    if (!currentProjectId || !currentProject) return
+    const completedResults = getCompletedResults()
+    if (completedResults.length === 0) return
+
+    // Copy each completed result into the project's asset folder and create assets
+    const newAssets: Asset[] = []
+    const assetSavePath = currentProject.assetSavePath || undefined
+    for (const result of completedResults) {
+      if (!result.path) continue
+      const { path: finalPath, url: finalUrl } = await copyToAssetFolder(result.path, result.url, assetSavePath)
+      const asset = addAsset(currentProjectId, {
+        type: result.type,
+        path: finalPath,
+        url: finalUrl,
+        prompt: result.prompt,
+        resolution: '',
+        duration: result.type === 'video' ? settings.duration : undefined,
+      })
+      newAssets.push(asset)
+    }
+
+    if (newAssets.length === 0) return
+
+    // Get the active timeline (or it will be auto-created)
+    const timeline = getActiveTimeline(currentProjectId)
+    if (!timeline) return
+
+    // Find the first unlocked video track
+    const videoTrackIndex = timeline.tracks.findIndex(t => t.kind === 'video' && !t.locked)
+    const targetTrack = videoTrackIndex >= 0 ? videoTrackIndex : 0
+
+    // Find end of existing content on this track
+    const trackClips = timeline.clips.filter(c => c.trackIndex === targetTrack)
+    let nextStart = trackClips.reduce((max, clip) =>
+      Math.max(max, clip.startTime + clip.duration), 0
+    )
+
+    // Create clips for each asset, placed sequentially
+    const newClips = newAssets.map(asset => {
+      const clipDuration = asset.duration || 5
+      const clip: TimelineClip = {
+        id: `clip-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        assetId: asset.id,
+        type: asset.type === 'video' ? 'video' : 'image',
+        startTime: nextStart,
+        duration: clipDuration,
+        trimStart: 0,
+        trimEnd: 0,
+        speed: 1,
+        reversed: false,
+        muted: false,
+        volume: 1,
+        trackIndex: targetTrack,
+        asset,
+        flipH: false,
+        flipV: false,
+        transitionIn: { type: 'none', duration: 0 },
+        transitionOut: { type: 'none', duration: 0 },
+        colorCorrection: DEFAULT_COLOR_CORRECTION,
+        opacity: 100,
+      }
+      nextStart += clipDuration
+      return clip
+    })
+
+    // Update timeline with new clips
+    updateTimeline(currentProjectId, timeline.id, {
+      clips: [...timeline.clips, ...newClips],
+    })
+
+    // Switch to the video editor tab
+    setCurrentTab('video-editor')
   }
 
   const handleDelete = (assetId: string) => {
@@ -1665,8 +1845,10 @@ export function GenSpace() {
         <BatchQueuePanel
           queue={queue}
           onRemove={removeFromQueue}
+          onReorder={reorderQueue}
           onClear={clearQueue}
           onCancel={cancelQueue}
+          onSendToEditor={handleSendToEditor}
           isProcessing={isProcessingQueue}
         />
       )}
