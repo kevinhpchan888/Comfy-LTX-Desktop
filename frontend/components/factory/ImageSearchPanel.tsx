@@ -99,7 +99,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-medium transition-colors ${
+      className={`flex flex-1 items-center justify-center gap-1 px-1.5 py-2 text-[10px] font-medium transition-colors whitespace-nowrap ${
         active
           ? 'border-b-2 border-violet-500 text-violet-300 bg-zinc-800/50'
           : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30'
