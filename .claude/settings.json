@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ltx-desktop": {
+      "command": "uv",
+      "args": ["run", "--directory", "mcp-server", "python", "ltx_mcp_server.py"],
+      "env": {
+        "LTX_BACKEND_URL": "http://localhost:8000",
+        "LTX_GENERATION_TIMEOUT": "600"
+      }
+    }
+  }
+}

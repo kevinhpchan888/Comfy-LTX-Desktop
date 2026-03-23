@@ -540,6 +540,18 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
         proxyToken: settings.factoryProxyToken,
         proxyModel: settings.factoryProxyModel,
       }
+
+      // Validate configuration before attempting LLM call
+      if (llmSettings.aiProvider === 'anthropic' && !llmSettings.anthropicApiKey) {
+        throw new Error('Anthropic API key not configured. Open Settings → AI Provider to add your key.')
+      }
+      if (llmSettings.aiProvider === 'local' && !llmSettings.proxyUrl) {
+        throw new Error('Proxy URL not configured. Open Settings → AI Provider to set your local proxy.')
+      }
+      if (llmSettings.aiProvider === 'hybrid' && !llmSettings.anthropicApiKey && !llmSettings.proxyUrl) {
+        throw new Error('No AI provider configured. Open Settings → AI Provider to set up Anthropic or a local proxy.')
+      }
+
       const llm = createLLMService(llmSettings)
 
       const selectedShot = shots.find(s => s.manifest.id === selectedShotId)

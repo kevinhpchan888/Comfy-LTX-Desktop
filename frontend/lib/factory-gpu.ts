@@ -202,17 +202,19 @@ export function validateShotGpu(shot: FactoryShot, vramGb: number): ValidationWa
     warnings.push({ shotId: id, severity: 'warning', message: `CFG ${cfg} > 7.0 causes robotic motion in LTX 2.3` })
   }
 
-  // VRAM estimation
-  const resolution = shot.manifest.video.resolution || '720p'
-  const withUpscale = shot.manifest.video.spatial_upscale
-  // Use project default checkpoint since manifest doesn't specify variant directly
-  const vramNeeded = estimateVramNeeded('dev-fp8', resolution, withUpscale)
-  if (vramNeeded > vramGb) {
-    warnings.push({
-      shotId: id,
-      severity: 'warning',
-      message: `Estimated ${vramNeeded}GB VRAM needed, only ${vramGb}GB available`,
-    })
+  // VRAM estimation — skip when VRAM is unknown (0 means detection failed)
+  if (vramGb > 0) {
+    const resolution = shot.manifest.video.resolution || '720p'
+    const withUpscale = shot.manifest.video.spatial_upscale
+    // Use project default checkpoint since manifest doesn't specify variant directly
+    const vramNeeded = estimateVramNeeded('dev-fp8', resolution, withUpscale)
+    if (vramNeeded > vramGb) {
+      warnings.push({
+        shotId: id,
+        severity: 'warning',
+        message: `Estimated ${vramNeeded}GB VRAM needed, only ${vramGb}GB available`,
+      })
+    }
   }
 
   // LoRA validation

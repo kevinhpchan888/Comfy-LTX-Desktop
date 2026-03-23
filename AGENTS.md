@@ -81,6 +81,52 @@ Key patterns:
 - Pyright strict mode (`backend/pyrightconfig.json`)
 - Dependencies in `backend/pyproject.toml`
 
+## MCP Server — Claude Code ↔ LTX Desktop
+
+An MCP server (`mcp-server/`) bridges Claude Code to the LTX Desktop backend, enabling autonomous video production.
+
+### Setup
+
+The server is auto-registered in `.claude/settings.json`. Requirements:
+1. LTX Desktop must be running (`pnpm dev`) so the backend is on port 8000
+2. Install MCP deps: `cd mcp-server && uv sync`
+
+### Available MCP Tools
+
+| Tool | Purpose |
+|---|---|
+| `health_check` | Verify backend is running |
+| `get_gpu_info` | GPU name, VRAM total/used/free |
+| `get_models_status` | Check model downloads |
+| `get_settings` / `update_settings` | Read/write backend config |
+| `generate_video` | Trigger video generation (blocking) |
+| `generate_video_and_wait` | Generate + poll progress until done |
+| `generate_image` | Generate still image (for first-frame conditioning) |
+| `get_generation_progress` | Poll generation progress |
+| `cancel_generation` | Cancel current generation |
+| `factory_batch_generate` | Run multiple shots sequentially |
+| `retry_failed_shot` | Auto-adjust params and retry on failure |
+| `inspect_video_file` | Check output file exists + metadata |
+| `inspect_image_file` | Read image as base64 for visual review |
+| `list_output_files` | List generated files in a directory |
+| `suggest_gap_prompt` | AI-suggested transition prompts |
+| `list_ic_lora_models` | Available IC-LoRA style models |
+
+### Autonomous Production Workflow
+
+When asked to produce a video sequence, follow this loop:
+1. `health_check` → verify backend is up
+2. `get_gpu_info` → determine safe resolution/duration
+3. `factory_batch_generate` → run all shots
+4. For failures: read the error, use `retry_failed_shot` (auto-adjusts params)
+5. `inspect_video_file` → verify outputs exist
+6. `list_output_files` → inventory final deliverables
+
+**Self-healing rules:**
+- OOM → reduce resolution or duration, retry
+- Timeout → switch to 'fast' model, retry
+- Backend down → inform user to start LTX Desktop
+
 ## Key File Locations
 
 - Backend architecture doc: `backend/architecture.md`
@@ -88,3 +134,4 @@ Key patterns:
 - Electron builder config: `electron-builder.yml`
 - Video editor (largest frontend file): `frontend/views/VideoEditor.tsx`
 - Project types: `frontend/types/project.ts`
+- MCP server: `mcp-server/ltx_mcp_server.py`
