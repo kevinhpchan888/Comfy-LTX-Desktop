@@ -32,6 +32,7 @@ interface ShotDetailProps {
   onDelete: () => void
   onSendToEditor: () => void
   onSendToEditorAndExport: () => void
+  onImageDoubleClick?: () => void
 }
 
 function Section({
@@ -74,6 +75,7 @@ export function ShotDetail({
   onDelete,
   onSendToEditor,
   onSendToEditorAndExport,
+  onImageDoubleClick,
 }: ShotDetailProps) {
   const m = shot.manifest
   const activeFrame = shot.frameIterations[shot.activeFrameIndex]
@@ -170,7 +172,11 @@ export function ShotDetail({
       <Section title="Frame Previews" icon={<Image className="h-3.5 w-3.5" />} defaultOpen>
         {activeFrame ? (
           <div className="flex flex-col gap-2">
-            <div className="overflow-hidden rounded-lg border border-zinc-800">
+            <div
+              className="overflow-hidden rounded-lg border border-zinc-800 cursor-zoom-in"
+              onDoubleClick={onImageDoubleClick}
+              title="Double-click to view full size"
+            >
               <img src={activeFrame.url} alt="Frame preview" className="w-full" />
             </div>
             <div className="flex items-center justify-between">

@@ -1,4 +1,5 @@
-import { AlertTriangle, Check, Square, CheckSquare } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { AlertTriangle, Check, Square, CheckSquare, GripVertical } from 'lucide-react'
 import type { FactoryShot, ValidationWarning } from '../../types/factory'
 import { groupShotsByScene, parseDuration } from '../../lib/factory-manifest'
 
@@ -10,6 +11,7 @@ interface StoryboardGridProps {
   onToggleSelect: (id: string) => void
   onRangeSelect: (id: string) => void
   onDoubleClick: (id: string) => void
+  onReorder: (fromIndex: number, toIndex: number) => void
   gpuWarnings: ValidationWarning[]
 }
 
@@ -43,6 +45,7 @@ export function StoryboardGrid({
   onToggleSelect,
   onRangeSelect,
   onDoubleClick,
+  onReorder,
   gpuWarnings,
 }: StoryboardGridProps) {
   const sceneGroups = groupShotsByScene(shots)
@@ -53,6 +56,11 @@ export function StoryboardGrid({
     warningsByShot.set(w.shotId, existing)
   }
 
+  // Drag state
+  const [dragShotId, setDragShotId] = useState<string | null>(null)
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const dragHandleRef = useRef(false) // tracks if drag started from the handle
+
   const handleClick = (e: React.MouseEvent, shotId: string) => {
     if (e.ctrlKey || e.metaKey) {
       onToggleSelect(shotId)
@@ -61,6 +69,54 @@ export function StoryboardGrid({
     } else {
       onSelect(shotId)
     }
+  }
+
+  const handleDragStart = (e: React.DragEvent, shotId: string) => {
+    if (!dragHandleRef.current) {
+      e.preventDefault()
+      return
+    }
+    setDragShotId(shotId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', shotId)
+    // Make the drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1'
+    }
+    setDragShotId(null)
+    setDropTargetId(null)
+    dragHandleRef.current = false
+  }
+
+  const handleDragOver = (e: React.DragEvent, shotId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (shotId !== dragShotId) {
+      setDropTargetId(shotId)
+    }
+  }
+
+  const handleDragLeave = () => {
+    setDropTargetId(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, targetShotId: string) => {
+    e.preventDefault()
+    setDropTargetId(null)
+    if (!dragShotId || dragShotId === targetShotId) return
+
+    const fromIndex = shots.findIndex(s => s.manifest.id === dragShotId)
+    const toIndex = shots.findIndex(s => s.manifest.id === targetShotId)
+    if (fromIndex >= 0 && toIndex >= 0) {
+      onReorder(fromIndex, toIndex)
+    }
+    setDragShotId(null)
   }
 
   return (
@@ -87,24 +143,35 @@ export function StoryboardGrid({
                 const dotClass = STATUS_DOT[shot.status] || STATUS_DOT.idle
                 const shotWarnings = warningsByShot.get(shot.manifest.id)
                 const activeFrame = shot.frameIterations[shot.activeFrameIndex]
+                const isDragOver = dropTargetId === shot.manifest.id
 
                 return (
-                  <button
+                  <div
                     key={shot.manifest.id}
-                    type="button"
-                    onClick={(e) => handleClick(e, shot.manifest.id)}
-                    onDoubleClick={() => onDoubleClick(shot.manifest.id)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, shot.manifest.id)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOver(e, shot.manifest.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, shot.manifest.id)}
                     className={`group relative flex flex-col overflow-hidden rounded-lg border bg-zinc-900 text-left transition-all ${borderClass} ${
                       isActive ? 'ring-2 ring-violet-500' : ''
-                    } ${isChecked ? 'ring-2 ring-blue-400' : ''}`}
+                    } ${isChecked ? 'ring-2 ring-blue-400' : ''} ${
+                      isDragOver ? 'ring-2 ring-amber-400 border-amber-400' : ''
+                    } ${dragShotId === shot.manifest.id ? 'opacity-50' : ''}`}
                   >
                     {/* Thumbnail area */}
-                    <div className="relative aspect-video w-full bg-zinc-800">
+                    <div
+                      className="relative aspect-video w-full bg-zinc-800 cursor-pointer"
+                      onClick={(e) => handleClick(e, shot.manifest.id)}
+                      onDoubleClick={() => onDoubleClick(shot.manifest.id)}
+                    >
                       {activeFrame ? (
                         <img
                           src={activeFrame.url}
                           alt={shot.manifest.id}
                           className="h-full w-full object-cover"
+                          draggable={false}
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xs text-zinc-600">
@@ -149,8 +216,20 @@ export function StoryboardGrid({
                     </div>
 
                     {/* Card info */}
-                    <div className="flex flex-col gap-1 p-2">
+                    <div
+                      className="flex flex-col gap-1 p-2 cursor-pointer"
+                      onClick={(e) => handleClick(e, shot.manifest.id)}
+                    >
                       <div className="flex items-center gap-1.5">
+                        {/* Drag handle */}
+                        <span
+                          className="cursor-grab text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                          onMouseDown={() => { dragHandleRef.current = true }}
+                          onMouseUp={() => { dragHandleRef.current = false }}
+                          title="Drag to reorder"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </span>
                         <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
                         <span className="truncate text-xs text-zinc-400">
                           {shot.status.replace('-', ' ')}
@@ -163,7 +242,7 @@ export function StoryboardGrid({
                         {shot.manifest.description}
                       </p>
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>

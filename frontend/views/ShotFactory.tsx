@@ -9,6 +9,7 @@ import { ManifestImporter } from '../components/factory/ManifestImporter'
 import { StoryboardGrid } from '../components/factory/StoryboardGrid'
 import { ShotDetail } from '../components/factory/ShotDetail'
 import { ComparisonViewer } from '../components/factory/ComparisonViewer'
+import { ImageLightbox } from '../components/factory/ImageLightbox'
 import { FactoryProgressBar } from '../components/factory/FactoryProgressBar'
 import { CreativeConsole } from '../components/factory/CreativeConsole'
 import { FactorySettings } from '../components/factory/FactorySettings'
@@ -52,6 +53,7 @@ export function ShotFactory() {
     addNewShot,
     sendToEditor,
     sendToEditorAndExport,
+    reorderShots,
   } = useFactory()
 
   const { settings, updateSettings } = useAppSettings()
@@ -59,6 +61,8 @@ export function ShotFactory() {
   const [showConsole, setShowConsole] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showNewShot, setShowNewShot] = useState(false)
+  const [lightboxShotId, setLightboxShotId] = useState<string | null>(null)
+  const lightboxShot = shots.find(s => s.manifest.id === lightboxShotId) || null
 
   const selectedShot = shots.find(s => s.manifest.id === selectedShotId) || null
   const comparisonShot = shots.find(s => s.manifest.id === comparisonShotId) || null
@@ -295,7 +299,15 @@ export function ShotFactory() {
             onSelect={selectShot}
             onToggleSelect={toggleShotSelection}
             onRangeSelect={selectShotRange}
-            onDoubleClick={setComparisonShotId}
+            onDoubleClick={(id) => {
+              const shot = shots.find(s => s.manifest.id === id)
+              if (shot && shot.frameIterations.length > 0) {
+                setLightboxShotId(id)
+              } else if (shot && shot.videoIterations.length > 0) {
+                setComparisonShotId(id)
+              }
+            }}
+            onReorder={reorderShots}
             gpuWarnings={gpuWarnings}
           />
         </div>
@@ -324,6 +336,7 @@ export function ShotFactory() {
               onDelete={() => deleteShots([selectedShot.manifest.id])}
               onSendToEditor={() => sendToEditor([selectedShot.manifest.id])}
               onSendToEditorAndExport={() => sendToEditorAndExport([selectedShot.manifest.id])}
+              onImageDoubleClick={() => setLightboxShotId(selectedShot.manifest.id)}
             />
           </div>
         ) : (
@@ -340,6 +353,16 @@ export function ShotFactory() {
         stats={stats}
         onCancel={cancelPipeline}
       />
+
+      {/* Image Lightbox Modal */}
+      {lightboxShot && lightboxShot.frameIterations.length > 0 && (
+        <ImageLightbox
+          frames={lightboxShot.frameIterations}
+          activeIndex={lightboxShot.activeFrameIndex >= 0 ? lightboxShot.activeFrameIndex : 0}
+          shotId={lightboxShot.manifest.id}
+          onClose={() => setLightboxShotId(null)}
+        />
+      )}
 
       {/* Comparison Viewer Modal */}
       {comparisonShot && (

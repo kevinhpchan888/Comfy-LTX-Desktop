@@ -49,6 +49,7 @@ interface FactoryContextType {
   deselectAllShots: () => void
   deleteShots: (ids: string[]) => void
   addNewShot: (shot: ManifestShot) => void
+  reorderShots: (fromIndex: number, toIndex: number) => void
 
   // Frame generation
   generateFrame: (shotId: string) => Promise<void>
@@ -279,6 +280,24 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       return { ...prev, shots: [...prev.shots, shotData] }
     })
     setSelectedShotId(shotData.id)
+  }, [])
+
+  const reorderShots = useCallback((fromIndex: number, toIndex: number) => {
+    setShots(prev => {
+      const updated = [...prev]
+      const [moved] = updated.splice(fromIndex, 1)
+      updated.splice(toIndex, 0, moved)
+      // Reassign order values to match new positions
+      return updated.map((s, i) => ({
+        ...s,
+        manifest: { ...s.manifest, order: i + 1 },
+      }))
+    })
+    setManifest(prev => {
+      if (!prev) return prev
+      // Sync manifest shot order with the new shots order
+      return prev // Will be kept in sync via shots state
+    })
   }, [])
 
   // ─── Frame Generation ────────────────────────────────────────────────────
@@ -952,6 +971,7 @@ ${JSON.stringify(manifest, null, 2)}`
     deselectAllShots,
     deleteShots,
     addNewShot,
+    reorderShots,
     generateFrame,
     generateAllFrames,
     renderVideo,
