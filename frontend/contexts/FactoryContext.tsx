@@ -388,10 +388,15 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     ))
 
     const frameConfig = shot.manifest.frames.first
-    if (!frameConfig || frameConfig.source !== 'generate') {
+    // Use first-frame prompt if available, otherwise fall back to video prompt
+    const imagePrompt = (frameConfig && frameConfig.source === 'generate' && frameConfig.prompt)
+      ? frameConfig.prompt
+      : shot.manifest.video.prompt
+
+    if (!imagePrompt) {
       setShots(prev => prev.map(s =>
         s.manifest.id === shotId
-          ? { ...s, status: 'error', error: 'No generatable frame config found' }
+          ? { ...s, status: 'error', error: 'No prompt available for image generation' }
           : s
       ))
       return
@@ -400,7 +405,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await window.electronAPI.generateVideo({
         imageMode: true,
-        prompt: frameConfig.prompt,
+        prompt: imagePrompt,
         resolution: '1080p',
         aspectRatio: shot.manifest.video.aspect_ratio || '16:9',
         duration: 0,
@@ -457,8 +462,9 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   const generateAllFrames = useCallback(async () => {
     cancelledRef.current = false
     const enabledShots = shots.filter(s => s.status !== 'disabled' && s.manifest.enabled)
+    // Include all shots that haven't generated a frame yet (idle or error)
     const shotsNeedingFrames = enabledShots.filter(s =>
-      s.manifest.frames.first && s.manifest.frames.first.source === 'generate' && s.frameIterations.length === 0
+      s.frameIterations.length === 0 && (s.status === 'idle' || s.status === 'error')
     )
 
     if (shotsNeedingFrames.length === 0) return

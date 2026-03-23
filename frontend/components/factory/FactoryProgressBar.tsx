@@ -42,7 +42,7 @@ export function FactoryProgressBar({ phase, progress, stats, onCancel }: Factory
             {formatElapsed(progress.startTime)}
           </span>
           <span className="shrink-0 rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
-            {phase.replace('-', ' ')}
+            {phase === 'generating-frames' ? 'generating images' : phase.replace('-', ' ')}
           </span>
           <button
             onClick={onCancel}
@@ -57,7 +57,7 @@ export function FactoryProgressBar({ phase, progress, stats, onCancel }: Factory
           <Separator />
           <span>{stats.total} shots</span>
           <Separator />
-          <span>{stats.framesReady} frames</span>
+          <span>{stats.framesReady} images</span>
           <Separator />
           <span>{stats.rendered} rendered</span>
           <Separator />

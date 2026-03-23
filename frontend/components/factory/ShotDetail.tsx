@@ -220,7 +220,7 @@ export function ShotDetail({
               onClick={onGenerateFrame}
               className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
             >
-              Generate Frame
+              Generate Image
             </button>
           </div>
         )}
@@ -439,7 +439,7 @@ export function ShotDetail({
             disabled={shot.status === 'disabled'}
             className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Generate Frame
+            Generate Image
           </button>
           <button
             onClick={onRenderVideo}
