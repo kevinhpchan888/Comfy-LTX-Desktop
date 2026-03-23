@@ -291,7 +291,7 @@ export function ShotFactory() {
         </div>
 
         {/* Center Panel — Storyboard Grid */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 min-w-0 overflow-auto p-4">
           <StoryboardGrid
             shots={shots}
             selectedShotId={selectedShotId}

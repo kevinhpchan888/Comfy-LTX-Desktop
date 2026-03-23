@@ -26,7 +26,7 @@ export interface AppSettings {
   tileT: number
   ffnChunks: number
   // Factory settings
-  factoryAiProvider: 'anthropic' | 'local' | 'hybrid'
+  factoryAiProvider: 'anthropic' | 'local' | 'claude-max' | 'hybrid'
   factoryAnthropicApiKey: string
   factoryAnthropicModel: string
   factoryProxyUrl: string
@@ -69,13 +69,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   imageGenerator: 'none',
   tileT: 0,
   ffnChunks: 2,
-  // Factory defaults — 'local' proxy works out of the box with Claude Max via local proxy
-  factoryAiProvider: 'local',
+  // Factory defaults — Claude Max proxy for Claude Pro/Max subscribers
+  factoryAiProvider: 'claude-max',
   factoryAnthropicApiKey: '',
   factoryAnthropicModel: 'claude-sonnet-4-6',
   factoryProxyUrl: 'http://localhost:4000',
   factoryProxyToken: '',
-  factoryProxyModel: 'ollama/qwen3-32b',
+  factoryProxyModel: 'claude-sonnet-4-6',
   factoryDefaultDuration: 5,
   factoryDefaultResolution: '720p',
   factoryDefaultFps: 24,

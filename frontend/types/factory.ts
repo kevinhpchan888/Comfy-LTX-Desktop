@@ -269,7 +269,7 @@ export interface ShotPreview {
 
 // ─── Factory Settings Types ─────────────────────────────────────────────────
 
-export type AiProvider = 'anthropic' | 'local' | 'hybrid'
+export type AiProvider = 'anthropic' | 'local' | 'claude-max' | 'hybrid'
 
 export interface FactorySettings {
   // AI provider

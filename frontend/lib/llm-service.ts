@@ -151,6 +151,122 @@ class AnthropicProvider implements LLMService {
   }
 }
 
+// ─── Claude Max Proxy Provider (Anthropic API via local proxy) ──────────────
+
+class ClaudeMaxProvider implements LLMService {
+  constructor(
+    private proxyUrl: string,
+    private model: string,
+  ) {}
+
+  private baseUrl(): string {
+    return this.proxyUrl.replace(/\/$/, '')
+  }
+
+  getProviderName(): string {
+    return `Claude Max (${this.model})`
+  }
+
+  async testConnection(): Promise<boolean> {
+    try {
+      // Try Anthropic-style endpoint first
+      const response = await fetch(`${this.baseUrl()}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
+
+  async complete(params: LLMCompletionParams): Promise<LLMCompletionResult> {
+    const response = await fetch(`${this.baseUrl()}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: params.maxTokens,
+        temperature: params.temperature ?? 0.7,
+        system: params.system,
+        messages: params.messages.map(m => ({ role: m.role, content: m.content })),
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Claude Max proxy error: ${response.status} ${err}`)
+    }
+
+    const data = await response.json()
+    const text = data.content?.[0]?.text || ''
+    return { text }
+  }
+
+  async *stream(params: LLMCompletionParams): AsyncGenerator<string> {
+    const response = await fetch(`${this.baseUrl()}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: params.maxTokens,
+        temperature: params.temperature ?? 0.7,
+        system: params.system,
+        messages: params.messages.map(m => ({ role: m.role, content: m.content })),
+        stream: true,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Claude Max proxy error: ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim()
+          if (data === '[DONE]') return
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+              yield parsed.delta.text
+            }
+          } catch {
+            // skip non-JSON lines
+          }
+        }
+      }
+    }
+  }
+}
+
 // ─── Local Proxy Provider (OpenAI-compatible) ───────────────────────────────
 
 class ProxyProvider implements LLMService {
@@ -277,6 +393,8 @@ export function createLLMService(settings: LLMSettings): LLMService {
   switch (settings.aiProvider) {
     case 'anthropic':
       return new AnthropicProvider(settings.anthropicApiKey, settings.anthropicModel)
+    case 'claude-max':
+      return new ClaudeMaxProvider(settings.proxyUrl, settings.proxyModel || 'claude-sonnet-4-6')
     case 'local':
       return new ProxyProvider(settings.proxyUrl, settings.proxyToken, settings.proxyModel)
     case 'hybrid':

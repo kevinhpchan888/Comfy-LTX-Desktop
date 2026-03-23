@@ -77,12 +77,47 @@ export function FactorySettings({
               onChange={e => onUpdate({ factoryAiProvider: e.target.value as AppSettings['factoryAiProvider'] })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white"
             >
-              <option value="anthropic">Anthropic (Direct)</option>
+              <option value="claude-max">Claude Max (Local Proxy)</option>
+              <option value="anthropic">Anthropic (Direct API Key)</option>
               <option value="local">Local Proxy (LiteLLM/Ollama)</option>
               <option value="hybrid">Hybrid</option>
             </select>
           </FieldGroup>
 
+          {/* Claude Max settings */}
+          {settings.factoryAiProvider === 'claude-max' && (
+            <>
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+                <p className="text-xs text-violet-300 mb-1 font-medium">Claude Max Proxy</p>
+                <p className="text-[11px] text-zinc-400">
+                  Routes through your local Claude Max proxy (e.g. ccproxy, claude-max-proxy).
+                  Make sure your proxy is running before testing the connection.
+                </p>
+              </div>
+              <FieldGroup label="Proxy URL">
+                <input
+                  value={settings.factoryProxyUrl}
+                  onChange={e => onUpdate({ factoryProxyUrl: e.target.value })}
+                  placeholder="http://localhost:4000"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600"
+                />
+              </FieldGroup>
+              <FieldGroup label="Model">
+                <select
+                  value={settings.factoryProxyModel}
+                  onChange={e => onUpdate({ factoryProxyModel: e.target.value })}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white"
+                >
+                  <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                  <option value="claude-opus-4-6">Claude Opus 4.6</option>
+                </select>
+              </FieldGroup>
+            </>
+          )}
+
+          {/* Direct Anthropic API settings */}
           {(settings.factoryAiProvider === 'anthropic' || settings.factoryAiProvider === 'hybrid') && (
             <>
               <FieldGroup label="Anthropic API Key">
@@ -105,6 +140,7 @@ export function FactorySettings({
             </>
           )}
 
+          {/* Local proxy settings (LiteLLM/Ollama) */}
           {(settings.factoryAiProvider === 'local' || settings.factoryAiProvider === 'hybrid') && (
             <>
               <FieldGroup label="Proxy URL">
