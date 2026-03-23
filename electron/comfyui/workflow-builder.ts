@@ -265,13 +265,6 @@ function buildZImageWorkflow(workflow: Workflow, params: WorkflowParams): Record
     workflow[OPTIONAL_NODE_IDS.zImageSaveImage].inputs['filename_prefix'] = `${safeProjectName}/image/${safeProjectName}`
   }
 
-  // Safety: strip any RSRTXSuperResolution nodes (nvvfx usually not installed)
-  for (const id of Object.keys(workflow)) {
-    if (workflow[id]?.class_type === 'RSRTXSuperResolution') {
-      delete workflow[id]
-    }
-  }
-
   return workflow as unknown as Record<string, unknown>
 }
 
@@ -442,63 +435,33 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
     genNode.inputs['audio'] = [OPTIONAL_NODE_IDS.uploadAudio, 0]
   }
 
-  // Connect frame images if provided (LoadImage → scale → RSLTXVGenerate)
-  // Always use ImageScale for frame cropping/resizing — RTX Super Resolution requires
-  // the NVIDIA Video Effects SDK (nvvfx) which most users won't have installed.
-  // RTX is still available for the explicit 4K post-processing upscale step.
-  const useRtxFrameUpscale = false
-  // When not preserving aspect ratio, center crop to target aspect ratio before scaling
+  // Connect frame images if provided (LoadImage → ImageScale → RSLTXVGenerate)
+  // Template already uses ImageScale (lanczos) — just patch dimensions and crop mode.
   const frameCrop = params.preserveAspectRatio ? 'disabled' : 'center'
-
-  if (!useRtxFrameUpscale) {
-    // Replace RSRTXSuperResolution nodes with ImageScale — only for nodes still in the workflow
-    for (const [id, srcId] of [
-      [OPTIONAL_NODE_IDS.cropFirstFrame, OPTIONAL_NODE_IDS.firstFrame],
-      [OPTIONAL_NODE_IDS.cropMiddleFrame, OPTIONAL_NODE_IDS.middleFrame],
-      [OPTIONAL_NODE_IDS.cropLastFrame, OPTIONAL_NODE_IDS.lastFrame],
-    ] as const) {
-      if (!(id in workflow)) continue
-      workflow[id] = {
-        class_type: 'ImageScale',
-        inputs: {
-          upscale_method: 'lanczos',
-          width: frameDims.width,
-          height: frameDims.height,
-          crop: frameCrop,
-          image: [srcId, 0],
-        },
-        _meta: { title: workflow[id]?._meta?.title ?? 'Scale Frame' },
-      }
+  for (const id of [
+    OPTIONAL_NODE_IDS.cropFirstFrame,
+    OPTIONAL_NODE_IDS.cropMiddleFrame,
+    OPTIONAL_NODE_IDS.cropLastFrame,
+  ]) {
+    if (id in workflow) {
+      workflow[id].inputs['width'] = frameDims.width
+      workflow[id].inputs['height'] = frameDims.height
+      workflow[id].inputs['crop'] = frameCrop
     }
   }
 
   if (params.firstImage) {
     workflow[OPTIONAL_NODE_IDS.firstFrame].inputs['image'] = params.firstImage.name
-    const cropFirst = workflow[OPTIONAL_NODE_IDS.cropFirstFrame]
-    if (useRtxFrameUpscale) {
-      cropFirst.inputs['resize_type.width'] = frameDims.width
-      cropFirst.inputs['resize_type.height'] = frameDims.height
-    }
     genNode.inputs['first_image'] = [OPTIONAL_NODE_IDS.cropFirstFrame, 0]
     genNode.inputs['first_strength'] = params.firstStrength ?? 1
   }
   if (params.middleImage) {
     workflow[OPTIONAL_NODE_IDS.middleFrame].inputs['image'] = params.middleImage.name
-    const cropMiddle = workflow[OPTIONAL_NODE_IDS.cropMiddleFrame]
-    if (useRtxFrameUpscale) {
-      cropMiddle.inputs['resize_type.width'] = frameDims.width
-      cropMiddle.inputs['resize_type.height'] = frameDims.height
-    }
     genNode.inputs['middle_image'] = [OPTIONAL_NODE_IDS.cropMiddleFrame, 0]
     genNode.inputs['middle_strength'] = params.middleStrength ?? 1
   }
   if (params.lastImage) {
     workflow[OPTIONAL_NODE_IDS.lastFrame].inputs['image'] = params.lastImage.name
-    const cropLast = workflow[OPTIONAL_NODE_IDS.cropLastFrame]
-    if (useRtxFrameUpscale) {
-      cropLast.inputs['resize_type.width'] = frameDims.width
-      cropLast.inputs['resize_type.height'] = frameDims.height
-    }
     genNode.inputs['last_image'] = [OPTIONAL_NODE_IDS.cropLastFrame, 0]
     genNode.inputs['last_strength'] = params.lastStrength ?? 1
   }
@@ -595,24 +558,13 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
   // Build the chain: each stage feeds images to the next
   let lastImageSource: [string, number] = ['6', 2] // RSLTXVGenerate images output
 
-  // 4K upscale (2x resolution)
+  // 4K upscale (2x resolution) — node 60 is ImageScale in the template
   if (params.rtxSuperRes) {
-    // Use lanczos 2x upscale — works on all GPUs without extra SDK installs.
-    // If RSRTXSuperResolution was in the template, remove it.
-    delete workflow[OPTIONAL_NODE_IDS.rtxSuperRes]
-    const upscaleId = '_4k_upscale'
-    workflow[upscaleId] = {
-      class_type: 'ImageScale',
-      inputs: {
-        upscale_method: 'lanczos',
-        width: params.width * 2,
-        height: params.height * 2,
-        crop: 'disabled',
-        image: lastImageSource,
-      },
-      _meta: { title: '4K Upscale' },
-    }
-    lastImageSource = [upscaleId, 0]
+    const upscaleNode = workflow[OPTIONAL_NODE_IDS.rtxSuperRes]
+    upscaleNode.inputs['width'] = params.width * 2
+    upscaleNode.inputs['height'] = params.height * 2
+    upscaleNode.inputs['image'] = lastImageSource
+    lastImageSource = [OPTIONAL_NODE_IDS.rtxSuperRes, 0]
   }
 
   // Film grain
@@ -637,14 +589,6 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
     workflow['25'].inputs['filename_prefix'] = `${safeProjectName}/video/${safeProjectName}`
     if (workflow[OPTIONAL_NODE_IDS.zImageSaveImage]) {
       workflow[OPTIONAL_NODE_IDS.zImageSaveImage].inputs['filename_prefix'] = `${safeProjectName}/image/${safeProjectName}`
-    }
-  }
-
-  // Safety: strip any remaining RSRTXSuperResolution nodes from the workflow.
-  // nvvfx is rarely installed and ComfyUI rejects workflows with unloaded node classes.
-  for (const id of Object.keys(workflow)) {
-    if (workflow[id]?.class_type === 'RSRTXSuperResolution') {
-      delete workflow[id]
     }
   }
 

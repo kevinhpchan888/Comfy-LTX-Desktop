@@ -559,7 +559,7 @@ export function registerComfyUIHandlers(): void {
         upscaleModels: extractOptions('LatentUpscaleModelLoader', 'model_name'),
         loras: extractOptions('RSLTXVGenerate', 'upscale_lora'),
         samplers: extractOptions('KSamplerSelect', 'sampler_name'),
-        hasRtxSuperRes: ('RSRTXSuperResolution' in info) && getGpuInfo().supportsRtx,
+        hasRtxSuperRes: true, // 4K upscale uses ImageScale (lanczos) — works on all GPUs
         hasZImage: 'RSZImageGenerate' in info,
       }
       logger.info(`comfyui:model-lists counts: checkpoints=${result.checkpoints.length}, textEncoders=${result.textEncoders.length}, upscaleModels=${result.upscaleModels.length}, loras=${result.loras.length}, samplers=${result.samplers.length}, rtxSuperRes=${result.hasRtxSuperRes}, zImage=${result.hasZImage}`)

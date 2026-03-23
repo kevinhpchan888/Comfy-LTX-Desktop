@@ -445,49 +445,47 @@
   },
   "57": {
     "inputs": {
-      "mode": "upscale (high bitrate)",
-      "quality": "ULTRA",
-      "resize_type": "target dimensions",
-      "resize_type.width": 960,
-      "resize_type.height": 544,
-      "images": ["20", 0]
+      "upscale_method": "lanczos",
+      "width": 960,
+      "height": 544,
+      "crop": "center",
+      "image": ["20", 0]
     },
-    "class_type": "RSRTXSuperResolution",
-    "_meta": { "title": "Upscale First Frame" }
+    "class_type": "ImageScale",
+    "_meta": { "title": "Scale First Frame" }
   },
   "58": {
     "inputs": {
-      "mode": "upscale (high bitrate)",
-      "quality": "ULTRA",
-      "resize_type": "target dimensions",
-      "resize_type.width": 960,
-      "resize_type.height": 544,
-      "images": ["21", 0]
+      "upscale_method": "lanczos",
+      "width": 960,
+      "height": 544,
+      "crop": "center",
+      "image": ["21", 0]
     },
-    "class_type": "RSRTXSuperResolution",
-    "_meta": { "title": "Upscale Middle Frame" }
+    "class_type": "ImageScale",
+    "_meta": { "title": "Scale Middle Frame" }
   },
   "59": {
     "inputs": {
-      "mode": "upscale (high bitrate)",
-      "quality": "ULTRA",
-      "resize_type": "target dimensions",
-      "resize_type.width": 960,
-      "resize_type.height": 544,
-      "images": ["22", 0]
+      "upscale_method": "lanczos",
+      "width": 960,
+      "height": 544,
+      "crop": "center",
+      "image": ["22", 0]
     },
-    "class_type": "RSRTXSuperResolution",
-    "_meta": { "title": "Upscale Last Frame" }
+    "class_type": "ImageScale",
+    "_meta": { "title": "Scale Last Frame" }
   },
   "60": {
     "inputs": {
-      "mode": "upscale (high bitrate)",
-      "quality": "ULTRA",
-      "resize_type": "scale by multiplier",
-      "resize_type.scale": 2
+      "upscale_method": "lanczos",
+      "width": 1920,
+      "height": 1088,
+      "crop": "disabled",
+      "image": ["6", 2]
     },
-    "class_type": "RSRTXSuperResolution",
-    "_meta": { "title": "RS RTX Super Resolution" }
+    "class_type": "ImageScale",
+    "_meta": { "title": "4K Upscale" }
   },
   "83": {
     "inputs": {
