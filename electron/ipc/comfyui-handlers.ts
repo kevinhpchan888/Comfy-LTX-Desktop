@@ -230,6 +230,7 @@ export function registerComfyUIHandlers(): void {
         imageAspectRatio: params.aspectRatio,
         rtxSuperRes: params.imageMode ? false : (params.rtxSuperRes ?? false),
         tileT: settings.tileT,
+        ffnChunks: settings.ffnChunks,
         gpuSupportsRtx: getGpuInfo().supportsRtx,
         preserveAspectRatio: params.preserveAspectRatio ?? false,
         sourceImageDims: sourceImageDims ?? undefined,

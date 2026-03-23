@@ -60,8 +60,8 @@ class ProModelSettings(SettingsBaseModel):
 
 
 class AppSettings(SettingsBaseModel):
-    use_torch_compile: bool = False
-    load_on_startup: bool = False
+    use_torch_compile: bool = True
+    load_on_startup: bool = True
     ltx_api_key: str = ""
     user_prefers_ltx_api_video_generations: bool = False
     fal_api_key: str = ""
@@ -131,8 +131,8 @@ UpdateSettingsRequest = AppSettingsPatch
 
 
 class SettingsResponse(SettingsBaseModel):
-    use_torch_compile: bool = False
-    load_on_startup: bool = False
+    use_torch_compile: bool = True
+    load_on_startup: bool = True
     has_ltx_api_key: bool = False
     user_prefers_ltx_api_video_generations: bool = False
     has_fal_api_key: bool = False

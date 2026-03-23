@@ -375,12 +375,27 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                       className="w-20 px-3 py-1.5 bg-zinc-700 border border-zinc-600 rounded-lg text-sm text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm text-white">FFN Chunks</label>
+                      <p className="text-xs text-zinc-500">Lower = faster, higher = less VRAM (1-4)</p>
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="4"
+                      value={settings.ffnChunks ?? 2}
+                      onChange={(e) => updateSettings({ ffnChunks: Math.max(1, Math.min(4, parseInt(e.target.value) || 2)) })}
+                      className="w-20 px-3 py-1.5 bg-zinc-700 border border-zinc-600 rounded-lg text-sm text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="bg-zinc-800/30 rounded-lg p-3">
                   <p className="text-xs text-zinc-400">
                     <span className="text-blue-400 font-medium">Tip:</span> These values are sent to the RSLTXVGenerate node in ComfyUI.
-                    Default: 20 steps, 3.0 CFG.
+                    Default: 8 steps, 3.0 CFG, 2 FFN chunks.
                   </p>
                 </div>
               </div>

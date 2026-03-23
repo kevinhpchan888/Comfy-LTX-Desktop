@@ -77,6 +77,8 @@ export interface WorkflowParams {
   gpuSupportsRtx?: boolean
   /** tile_t (0 = auto) */
   tileT?: number
+  /** FFN chunks for memory/speed tradeoff (1 = fastest, 4 = lowest memory) */
+  ffnChunks?: number
   /** Preserve source image aspect ratio (scale by longest edge) */
   preserveAspectRatio?: boolean
   /** Source image dimensions (width, height) — read from disk in electron layer */
@@ -421,6 +423,9 @@ export function buildWorkflow(params: WorkflowParams): Record<string, unknown> {
 
   // Connect upscalers if enabled
   genNode.inputs['tile_t'] = params.tileT ?? 0
+  if (params.ffnChunks !== undefined) {
+    genNode.inputs['ffn_chunks'] = params.ffnChunks
+  }
   genNode.inputs['upscale'] = !!params.spatialUpscale
   if (params.spatialUpscale) {
     genNode.inputs['upscale_model'] = [OPTIONAL_NODE_IDS.spatialUpscaler, 0]
