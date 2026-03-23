@@ -14,6 +14,7 @@ import { FactoryProgressBar } from '../components/factory/FactoryProgressBar'
 import { CreativeConsole } from '../components/factory/CreativeConsole'
 import { FactorySettings } from '../components/factory/FactorySettings'
 import { NewShotDialog } from '../components/factory/NewShotDialog'
+import { ClaudeConnectionIndicator } from '../components/factory/ClaudeConnectionIndicator'
 import { useAppSettings } from '../contexts/AppSettingsContext'
 
 export function ShotFactory() {
@@ -312,12 +313,15 @@ export function ShotFactory() {
                 AI
               </button>
             </div>
-            <button
-              onClick={clearFactory}
-              className="w-full text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors pt-1"
-            >
-              Close Manifest
-            </button>
+            <div className="flex items-center justify-between pt-1.5">
+              <ClaudeConnectionIndicator />
+              <button
+                onClick={clearFactory}
+                className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+              >
+                Close Manifest
+              </button>
+            </div>
           </div>
         </div>
 

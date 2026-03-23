@@ -27,6 +27,8 @@ from mcp.server.fastmcp import FastMCP
 BACKEND_URL = os.environ.get("LTX_BACKEND_URL", "http://localhost:8000")
 REQUEST_TIMEOUT = float(os.environ.get("LTX_REQUEST_TIMEOUT", "30"))
 GENERATION_TIMEOUT = float(os.environ.get("LTX_GENERATION_TIMEOUT", "600"))
+# Directory where the MCP heartbeat file is written so the frontend can detect connection
+HEARTBEAT_DIR = os.environ.get("LTX_HEARTBEAT_DIR", "")
 
 mcp = FastMCP(
     "LTX Desktop",
@@ -38,6 +40,35 @@ mcp = FastMCP(
     ),
 )
 
+
+# ─── Heartbeat ───────────────────────────────────────────────────────────────
+
+def _write_heartbeat(tool_name: str) -> None:
+    """Write a heartbeat file so the LTX Desktop frontend can detect MCP connection."""
+    # Write to configured heartbeat dir, or user's home .ltx-desktop dir
+    dirs_to_try: list[str] = []
+    if HEARTBEAT_DIR:
+        dirs_to_try.append(HEARTBEAT_DIR)
+    home = os.path.expanduser("~")
+    dirs_to_try.append(os.path.join(home, ".ltx-desktop"))
+
+    heartbeat = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "epoch": time.time(),
+        "lastTool": tool_name,
+        "pid": os.getpid(),
+    }
+
+    for d in dirs_to_try:
+        try:
+            os.makedirs(d, exist_ok=True)
+            path = os.path.join(d, ".mcp-heartbeat.json")
+            with open(path, "w") as f:
+                json.dump(heartbeat, f)
+            break
+        except Exception:
+            continue
+
 # ─── HTTP Client ──────────────────────────────────────────────────────────────
 
 
@@ -46,6 +77,7 @@ def _client() -> httpx.AsyncClient:
 
 
 async def _get(path: str) -> dict[str, Any]:
+    _write_heartbeat(f"GET {path}")
     async with _client() as client:
         resp = await client.get(path)
         resp.raise_for_status()
@@ -54,6 +86,7 @@ async def _get(path: str) -> dict[str, Any]:
 
 
 async def _post(path: str, body: dict[str, Any] | None = None, timeout: float | None = None) -> dict[str, Any]:
+    _write_heartbeat(f"POST {path}")
     async with _client() as client:
         resp = await client.post(path, json=body or {}, timeout=timeout or REQUEST_TIMEOUT)
         resp.raise_for_status()
@@ -374,6 +407,7 @@ async def inspect_video_file(video_path: str) -> str:
     Returns file existence, size in MB, and modification time.
     Useful for verifying a generation actually produced output.
     """
+    _write_heartbeat("inspect_video_file")
     p = Path(video_path)
     if not p.exists():
         return json.dumps({"error": f"File not found: {video_path}"})
@@ -398,6 +432,7 @@ async def inspect_image_file(image_path: str) -> str:
     Returns image metadata and base64-encoded content for Claude to visually inspect.
     Images larger than 5MB are returned as metadata-only.
     """
+    _write_heartbeat("inspect_image_file")
     p = Path(image_path)
     if not p.exists():
         return json.dumps({"error": f"File not found: {image_path}"})
@@ -437,6 +472,7 @@ async def list_output_files(directory: str, pattern: str = "*.mp4") -> str:
 
     Returns sorted list of matching files with sizes and timestamps.
     """
+    _write_heartbeat("list_output_files")
     p = Path(directory)
     if not p.is_dir():
         return json.dumps({"error": f"Directory not found: {directory}"})
@@ -727,6 +763,7 @@ async def get_factory_status(project_path: str) -> str:
     Use this proactively to check for errors after batch operations.
     When errors are found, use diagnose_factory_errors to get fix suggestions.
     """
+    _write_heartbeat("get_factory_status")
     status_path = Path(project_path) / "factory" / ".factory-status.json"
     if not status_path.exists():
         return json.dumps({
@@ -759,6 +796,7 @@ async def diagnose_factory_errors(project_path: str) -> str:
         - IPC errors → restart the app
         - Missing node errors → restart ComfyUI
     """
+    _write_heartbeat("diagnose_factory_errors")
     status_path = Path(project_path) / "factory" / ".factory-status.json"
     if not status_path.exists():
         return json.dumps({"status": "ok", "message": "No factory status file — no errors detected"})
@@ -890,6 +928,7 @@ async def watch_factory_errors(project_path: str, poll_interval: float = 10.0, m
 
     Returns the first status update that contains errors, or a summary after max_polls.
     """
+    _write_heartbeat("watch_factory_errors")
     status_path = Path(project_path) / "factory" / ".factory-status.json"
     last_error_count = 0
 
@@ -975,6 +1014,7 @@ async def get_remotion_requests(project_path: str) -> str:
     4. Use the rendered frame as the shot's image (upload via the Factory UI)
     5. Mark the request as complete using complete_remotion_request
     """
+    _write_heartbeat("get_remotion_requests")
     requests_path = Path(project_path) / "factory" / ".remotion-requests.json"
     if not requests_path.exists():
         return json.dumps({"requests": [], "message": "No Remotion requests found"})
@@ -1006,6 +1046,7 @@ async def complete_remotion_request(
 
     Updates the request status to 'complete' and records the output path.
     """
+    _write_heartbeat("complete_remotion_request")
     requests_path = Path(project_path) / "factory" / ".remotion-requests.json"
     if not requests_path.exists():
         return json.dumps({"error": "No requests file found"})
