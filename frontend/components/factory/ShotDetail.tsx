@@ -35,6 +35,7 @@ interface ShotDetailProps {
   onSendToEditor: () => void
   onSendToEditorAndExport: () => void
   onImageDoubleClick?: () => void
+  onSetActiveFrame: (index: number) => void
   onUploadImage: (filePath: string) => void
   onUseWebImage: (url: string, attribution?: string) => void
   onRemotionRequest: (description: string) => void
@@ -84,6 +85,7 @@ export function ShotDetail({
   onSendToEditor,
   onSendToEditorAndExport,
   onImageDoubleClick,
+  onSetActiveFrame,
   onUploadImage,
   onUseWebImage,
   onRemotionRequest,
@@ -210,9 +212,42 @@ export function ShotDetail({
             >
               <img src={activeFrame.url} alt="Frame preview" className="w-full" />
             </div>
+            {/* Frame history — show when there are multiple iterations */}
+            {shot.frameIterations.length > 1 && (
+              <div>
+                <span className="text-[10px] text-zinc-500 mb-1 block">
+                  History ({shot.frameIterations.length} versions)
+                </span>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {shot.frameIterations.map((iter, idx) => (
+                    <button
+                      key={iter.id}
+                      onClick={() => onSetActiveFrame(idx)}
+                      className={`shrink-0 overflow-hidden rounded border transition-all ${
+                        idx === shot.activeFrameIndex
+                          ? 'border-violet-500 ring-1 ring-violet-500'
+                          : 'border-zinc-700 hover:border-zinc-500'
+                      }`}
+                      title={`Version ${idx + 1}${idx === shot.activeFrameIndex ? ' (active)' : ''} — click to use`}
+                    >
+                      <img
+                        src={iter.url}
+                        alt={`Frame v${idx + 1}`}
+                        className="h-12 w-20 object-cover"
+                      />
+                      <span className={`block text-center text-[9px] py-0.5 ${
+                        idx === shot.activeFrameIndex ? 'text-violet-300 bg-violet-500/10' : 'text-zinc-500'
+                      }`}>
+                        v{idx + 1}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-zinc-500">
-                {activeFrame.seed !== undefined ? `Seed: ${activeFrame.seed}` : 'No seed info'}
+                {activeFrame.seed !== undefined ? `Seed: ${activeFrame.seed}` : `v${shot.activeFrameIndex + 1} of ${shot.frameIterations.length}`}
               </span>
               <div className="flex items-center gap-1">
                 <button

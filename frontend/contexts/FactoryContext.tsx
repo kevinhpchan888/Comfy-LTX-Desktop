@@ -65,6 +65,7 @@ interface FactoryContextType {
   renderVideo: (shotId: string) => Promise<void>
   renderAllVideos: () => Promise<void>
   approveIteration: (shotId: string, iterationIndex: number) => void
+  setActiveFrameIndex: (shotId: string, frameIndex: number) => void
 
   // Pipeline
   phase: FactoryPhase
@@ -908,6 +909,14 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  const setActiveFrameIndex = useCallback((shotId: string, frameIndex: number) => {
+    setShots(prev => prev.map(s => {
+      if (s.manifest.id !== shotId) return s
+      if (frameIndex < 0 || frameIndex >= s.frameIterations.length) return s
+      return { ...s, activeFrameIndex: frameIndex }
+    }))
+  }, [])
+
   // ─── Pipeline ────────────────────────────────────────────────────────────
 
   const cancelPipeline = useCallback(() => {
@@ -1311,6 +1320,7 @@ ${JSON.stringify(manifest, null, 2)}`
     renderVideo,
     renderAllVideos,
     approveIteration,
+    setActiveFrameIndex,
     phase,
     progress,
     cancelPipeline,

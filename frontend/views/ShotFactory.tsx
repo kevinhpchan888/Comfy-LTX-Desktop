@@ -37,6 +37,7 @@ export function ShotFactory() {
     renderVideo,
     renderAllVideos,
     approveIteration,
+    setActiveFrameIndex,
     toggleShotEnabled,
     updateShotManifest,
     organizeOutput,
@@ -425,6 +426,7 @@ export function ShotFactory() {
               onSendToEditor={() => sendToEditor([selectedShot.manifest.id])}
               onSendToEditorAndExport={() => sendToEditorAndExport([selectedShot.manifest.id])}
               onImageDoubleClick={() => setLightboxShotId(selectedShot.manifest.id)}
+              onSetActiveFrame={(idx) => setActiveFrameIndex(selectedShot.manifest.id, idx)}
               onUploadImage={(filePath) => uploadFrameImage(selectedShot.manifest.id, filePath)}
               onUseWebImage={(url, attr) => useWebImage(selectedShot.manifest.id, url, attr)}
               onRemotionRequest={(desc) => requestRemotionFrame(selectedShot.manifest.id, desc)}
