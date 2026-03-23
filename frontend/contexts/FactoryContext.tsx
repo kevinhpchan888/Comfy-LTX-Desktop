@@ -625,34 +625,55 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   // ─── Send to Editor ─────────────────────────────────────────────────────
 
   /** Shared helper: copy shots to asset folder, create assets + timeline clips, switch to editor.
+   *  Sends rendered videos when available, falls back to frame images.
    *  Returns the new clips and tracks (for optional auto-export). */
   const sendShotsToTimeline = useCallback(async (shotIds: string[]): Promise<{ clips: TimelineClip[]; tracks: Track[] } | null> => {
     if (!currentProjectId || !currentProject) return null
 
+    // Include shots that have either rendered videos OR generated frames
     const shotsToSend = shots.filter(s =>
-      shotIds.includes(s.manifest.id) && s.videoIterations.length > 0
+      shotIds.includes(s.manifest.id) && (s.videoIterations.length > 0 || s.frameIterations.length > 0)
     )
-    if (shotsToSend.length === 0) return null
+    if (shotsToSend.length === 0) {
+      console.warn('[Factory] No shots with videos or frames to send to editor')
+      return null
+    }
 
     const assetSavePath = currentProject.assetSavePath || undefined
     const newAssets: Asset[] = []
 
     for (const shot of shotsToSend) {
+      // Prefer rendered video, fall back to frame image
       const activeVideo = shot.videoIterations[shot.activeVideoIndex]
-      if (!activeVideo) continue
+      const activeFrame = shot.frameIterations[shot.activeFrameIndex]
 
-      const { path: finalPath, url: finalUrl } = await copyToAssetFolder(
-        activeVideo.path, activeVideo.url, assetSavePath,
-      )
-      const asset = addAsset(currentProjectId, {
-        type: 'video',
-        path: finalPath,
-        url: finalUrl,
-        prompt: shot.manifest.video.prompt,
-        resolution: shot.manifest.video.resolution || '',
-        duration: parseDuration(shot.manifest.video.duration),
-      })
-      newAssets.push(asset)
+      if (activeVideo) {
+        const { path: finalPath, url: finalUrl } = await copyToAssetFolder(
+          activeVideo.path, activeVideo.url, assetSavePath,
+        )
+        const asset = addAsset(currentProjectId, {
+          type: 'video',
+          path: finalPath,
+          url: finalUrl,
+          prompt: shot.manifest.video.prompt,
+          resolution: shot.manifest.video.resolution || '',
+          duration: parseDuration(shot.manifest.video.duration),
+        })
+        newAssets.push(asset)
+      } else if (activeFrame) {
+        const { path: finalPath, url: finalUrl } = await copyToAssetFolder(
+          activeFrame.path, activeFrame.url, assetSavePath,
+        )
+        const asset = addAsset(currentProjectId, {
+          type: 'image',
+          path: finalPath,
+          url: finalUrl,
+          prompt: shot.manifest.video.prompt,
+          resolution: shot.manifest.video.resolution || '',
+          duration: parseDuration(shot.manifest.video.duration),
+        })
+        newAssets.push(asset)
+      }
     }
 
     if (newAssets.length === 0) return null

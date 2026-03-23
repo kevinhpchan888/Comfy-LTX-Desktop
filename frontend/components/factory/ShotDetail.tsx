@@ -445,8 +445,8 @@ export function ShotDetail({
             )}
           </button>
         </div>
-        {/* Send to Editor — only available when shot has rendered video */}
-        {shot.videoIterations.length > 0 && (
+        {/* Send to Editor — available when shot has rendered video or generated frame */}
+        {(shot.videoIterations.length > 0 || shot.frameIterations.length > 0) && (
           <div className="flex gap-2">
             <button
               onClick={onSendToEditor}
