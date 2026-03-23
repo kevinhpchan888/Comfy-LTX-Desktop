@@ -13,8 +13,10 @@ import {
   Check,
   EyeOff,
   Eye,
+  Trash2,
+  Pencil,
 } from 'lucide-react'
-import type { FactoryShot, ValidationWarning } from '../../types/factory'
+import type { FactoryShot, ManifestShot, ValidationWarning } from '../../types/factory'
 import { parseDuration } from '../../lib/factory-manifest'
 
 interface ShotDetailProps {
@@ -25,6 +27,8 @@ interface ShotDetailProps {
   onRenderVideo: () => void
   onApprove: (index: number) => void
   onToggleEnabled: () => void
+  onUpdateManifest: (updates: Partial<ManifestShot>) => void
+  onDelete: () => void
 }
 
 function Section({
@@ -63,15 +67,58 @@ export function ShotDetail({
   onRenderVideo,
   onApprove,
   onToggleEnabled,
+  onUpdateManifest,
+  onDelete,
 }: ShotDetailProps) {
   const m = shot.manifest
   const activeFrame = shot.frameIterations[shot.activeFrameIndex]
   const duration = parseDuration(m.video.duration)
   const promptWords = m.video.prompt.trim().split(/\s+/).length
 
+  // Inline editing state
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+
   // VRAM estimate
   const estimatedVram = vramGb > 0 ? Math.round(vramGb * 0.8) : 0
   const vramColor = estimatedVram <= vramGb * 0.7 ? 'bg-green-500' : estimatedVram <= vramGb * 0.9 ? 'bg-yellow-500' : 'bg-red-500'
+
+  const startEdit = (field: string, value: string) => {
+    setEditingField(field)
+    setEditValue(value)
+  }
+
+  const commitEdit = (field: string) => {
+    setEditingField(null)
+    const trimmed = editValue.trim()
+    if (!trimmed && field === 'videoPrompt') return // Don't allow empty video prompt
+
+    switch (field) {
+      case 'videoPrompt':
+        onUpdateManifest({ video: { ...m.video, prompt: trimmed } })
+        break
+      case 'description':
+        onUpdateManifest({ description: trimmed })
+        break
+      case 'firstFramePrompt':
+        if (m.frames.first && m.frames.first.source === 'generate') {
+          onUpdateManifest({
+            frames: { ...m.frames, first: { ...m.frames.first, prompt: trimmed } },
+          })
+        }
+        break
+    }
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent, field: string) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      commitEdit(field)
+    }
+    if (e.key === 'Escape') {
+      setEditingField(null)
+    }
+  }
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-zinc-950">
@@ -79,13 +126,38 @@ export function ShotDetail({
       <div className="border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center justify-between">
           <h2 className="font-mono text-sm font-bold text-zinc-100">{m.id}</h2>
-          <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
-            {shot.status.replace('-', ' ')}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
+              {shot.status.replace('-', ' ')}
+            </span>
+            <button
+              onClick={onDelete}
+              className="rounded p-1 text-zinc-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+              title="Delete shot"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
         <p className="mt-1 text-xs text-zinc-400">{m.scene}</p>
-        {m.description && (
-          <p className="mt-1 text-xs text-zinc-300">{m.description}</p>
+        {/* Editable description */}
+        {editingField === 'description' ? (
+          <input
+            value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            onBlur={() => commitEdit('description')}
+            onKeyDown={e => handleEditKeyDown(e, 'description')}
+            autoFocus
+            className="mt-1 w-full rounded border border-violet-500 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 outline-none"
+          />
+        ) : (
+          <p
+            className="mt-1 cursor-pointer text-xs text-zinc-300 transition-colors hover:text-violet-300"
+            onClick={() => startEdit('description', m.description)}
+            title="Click to edit"
+          >
+            {m.description || <span className="italic text-zinc-500">No description — click to add</span>}
+          </p>
         )}
       </div>
 
@@ -108,11 +180,6 @@ export function ShotDetail({
                 Regenerate
               </button>
             </div>
-            {m.frames.first && (
-              <span className="text-[10px] text-zinc-500">
-                Source: {m.frames.first.source}
-              </span>
-            )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-900 p-6">
@@ -124,37 +191,102 @@ export function ShotDetail({
             >
               Generate Frame
             </button>
-            {m.frames.first && (
-              <span className="text-[10px] text-zinc-500">
-                Source: {m.frames.first.source}
-              </span>
+          </div>
+        )}
+        {/* First frame prompt (editable) */}
+        {m.frames.first && m.frames.first.source === 'generate' && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-medium text-zinc-500">First Frame Prompt</span>
+              {editingField !== 'firstFramePrompt' && (
+                <button
+                  onClick={() => startEdit('firstFramePrompt', m.frames.first && m.frames.first.source === 'generate' ? m.frames.first.prompt : '')}
+                  className="rounded p-0.5 text-zinc-500 hover:text-violet-400"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {editingField === 'firstFramePrompt' ? (
+              <textarea
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onBlur={() => commitEdit('firstFramePrompt')}
+                onKeyDown={e => handleEditKeyDown(e, 'firstFramePrompt')}
+                autoFocus
+                rows={3}
+                className="w-full resize-none rounded border border-violet-500 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 outline-none"
+              />
+            ) : (
+              <p className="text-xs text-zinc-400 whitespace-pre-wrap">
+                {m.frames.first.prompt}
+              </p>
             )}
           </div>
         )}
       </Section>
 
-      {/* Prompt */}
-      <Section title="Prompt" icon={<FileText className="h-3.5 w-3.5" />} defaultOpen>
+      {/* Video Prompt (editable) */}
+      <Section title={`Video Prompt (${promptWords} words)`} icon={<FileText className="h-3.5 w-3.5" />} defaultOpen>
         <div className="relative">
-          <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-900 p-3 text-xs text-zinc-300">
-            {m.video.prompt}
-          </div>
-          <span className="mt-1 inline-block rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
-            {promptWords} words
-          </span>
+          {editingField === 'videoPrompt' ? (
+            <textarea
+              value={editValue}
+              onChange={e => setEditValue(e.target.value)}
+              onBlur={() => commitEdit('videoPrompt')}
+              onKeyDown={e => handleEditKeyDown(e, 'videoPrompt')}
+              autoFocus
+              rows={6}
+              className="w-full resize-none rounded border border-violet-500 bg-zinc-900 px-3 py-2 text-xs text-zinc-300 outline-none"
+            />
+          ) : (
+            <div
+              className="group max-h-40 cursor-pointer overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-900 p-3 text-xs text-zinc-300 transition-colors hover:bg-zinc-800"
+              onClick={() => startEdit('videoPrompt', m.video.prompt)}
+              title="Click to edit"
+            >
+              {m.video.prompt}
+              <Pencil className="ml-1 inline-block h-3 w-3 text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100" />
+            </div>
+          )}
         </div>
       </Section>
 
-      {/* Settings */}
-      <Section title="Settings" icon={<Settings className="h-3.5 w-3.5" />}>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-          <SettingRow label="Duration" value={`${duration}s`} />
-          <SettingRow label="Resolution" value={m.video.resolution} />
+      {/* Video Settings (editable dropdowns) */}
+      <Section title="Video Settings" icon={<Settings className="h-3.5 w-3.5" />}>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <EditableSelect
+            label="Duration"
+            value={String(duration)}
+            options={[{ v: '2', l: '2s' }, { v: '5', l: '5s' }, { v: '10', l: '10s' }]}
+            onChange={v => onUpdateManifest({ video: { ...m.video, duration: v } })}
+          />
+          <EditableSelect
+            label="Resolution"
+            value={m.video.resolution}
+            options={[{ v: '512p', l: '512p' }, { v: '720p', l: '720p' }, { v: '1080p', l: '1080p' }]}
+            onChange={v => onUpdateManifest({ video: { ...m.video, resolution: v } })}
+          />
           <SettingRow label="FPS" value={String(m.video.fps)} />
-          <SettingRow label="Aspect" value={m.video.aspect_ratio} />
-          <SettingRow label="Camera" value={m.video.camera_motion || 'none'} />
-          <SettingRow label="Audio" value={m.video.audio ? 'Yes' : 'No'} />
-          <SettingRow label="Film Grain" value={m.video.film_grain ? 'Yes' : 'No'} />
+          <EditableSelect
+            label="Aspect"
+            value={m.video.aspect_ratio}
+            options={[{ v: '16:9', l: '16:9' }, { v: '9:16', l: '9:16' }]}
+            onChange={v => onUpdateManifest({ video: { ...m.video, aspect_ratio: v } })}
+          />
+          <EditableSelect
+            label="Camera"
+            value={m.video.camera_motion || 'none'}
+            options={[
+              { v: 'none', l: 'None' }, { v: 'dolly_in', l: 'Dolly In' }, { v: 'dolly_out', l: 'Dolly Out' },
+              { v: 'dolly_left', l: 'Dolly Left' }, { v: 'dolly_right', l: 'Dolly Right' },
+              { v: 'jib_up', l: 'Jib Up' }, { v: 'jib_down', l: 'Jib Down' },
+              { v: 'static', l: 'Static' }, { v: 'focus_shift', l: 'Focus Shift' },
+            ]}
+            onChange={v => onUpdateManifest({ video: { ...m.video, camera_motion: v } })}
+          />
+          <EditableToggle label="Audio" value={m.video.audio} onChange={v => onUpdateManifest({ video: { ...m.video, audio: v } })} />
+          <EditableToggle label="Film Grain" value={m.video.film_grain} onChange={v => onUpdateManifest({ video: { ...m.video, film_grain: v } })} />
           <SettingRow label="Iterations" value={String(m.video.iterations)} />
         </div>
       </Section>
@@ -312,6 +444,57 @@ function SettingRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between">
       <span className="text-[11px] text-zinc-500">{label}</span>
       <span className="text-[11px] text-zinc-300">{value}</span>
+    </div>
+  )
+}
+
+function EditableSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: Array<{ v: string; l: string }>
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[11px] text-zinc-500">{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-300 outline-none focus:border-violet-500"
+      >
+        {options.map(o => (
+          <option key={o.v} value={o.v}>{o.l}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function EditableToggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[11px] text-zinc-500">{label}</span>
+      <button
+        onClick={() => onChange(!value)}
+        className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+          value ? 'bg-violet-500/20 text-violet-300' : 'bg-zinc-800 text-zinc-500'
+        }`}
+      >
+        {value ? 'Yes' : 'No'}
+      </button>
     </div>
   )
 }

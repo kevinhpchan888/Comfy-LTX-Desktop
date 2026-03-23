@@ -69,8 +69,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   imageGenerator: 'none',
   tileT: 0,
   ffnChunks: 2,
-  // Factory defaults
-  factoryAiProvider: 'anthropic',
+  // Factory defaults — 'local' proxy works out of the box with Claude Max via local proxy
+  factoryAiProvider: 'local',
   factoryAnthropicApiKey: '',
   factoryAnthropicModel: 'claude-sonnet-4-6',
   factoryProxyUrl: 'http://localhost:4000',

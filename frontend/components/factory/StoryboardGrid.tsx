@@ -1,11 +1,14 @@
-import { AlertTriangle, Check } from 'lucide-react'
+import { AlertTriangle, Check, Square, CheckSquare } from 'lucide-react'
 import type { FactoryShot, ValidationWarning } from '../../types/factory'
 import { groupShotsByScene, parseDuration } from '../../lib/factory-manifest'
 
 interface StoryboardGridProps {
   shots: FactoryShot[]
   selectedShotId: string | null
+  selectedShotIds: Set<string>
   onSelect: (id: string) => void
+  onToggleSelect: (id: string) => void
+  onRangeSelect: (id: string) => void
   onDoubleClick: (id: string) => void
   gpuWarnings: ValidationWarning[]
 }
@@ -35,7 +38,10 @@ const STATUS_DOT: Record<string, string> = {
 export function StoryboardGrid({
   shots,
   selectedShotId,
+  selectedShotIds,
   onSelect,
+  onToggleSelect,
+  onRangeSelect,
   onDoubleClick,
   gpuWarnings,
 }: StoryboardGridProps) {
@@ -45,6 +51,16 @@ export function StoryboardGrid({
     const existing = warningsByShot.get(w.shotId) || []
     existing.push(w)
     warningsByShot.set(w.shotId, existing)
+  }
+
+  const handleClick = (e: React.MouseEvent, shotId: string) => {
+    if (e.ctrlKey || e.metaKey) {
+      onToggleSelect(shotId)
+    } else if (e.shiftKey) {
+      onRangeSelect(shotId)
+    } else {
+      onSelect(shotId)
+    }
   }
 
   return (
@@ -65,7 +81,8 @@ export function StoryboardGrid({
             </div>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               {sceneShots.map(shot => {
-                const isSelected = shot.manifest.id === selectedShotId
+                const isActive = shot.manifest.id === selectedShotId
+                const isChecked = selectedShotIds.has(shot.manifest.id)
                 const borderClass = STATUS_BORDER[shot.status] || STATUS_BORDER.idle
                 const dotClass = STATUS_DOT[shot.status] || STATUS_DOT.idle
                 const shotWarnings = warningsByShot.get(shot.manifest.id)
@@ -75,11 +92,11 @@ export function StoryboardGrid({
                   <button
                     key={shot.manifest.id}
                     type="button"
-                    onClick={() => onSelect(shot.manifest.id)}
+                    onClick={(e) => handleClick(e, shot.manifest.id)}
                     onDoubleClick={() => onDoubleClick(shot.manifest.id)}
-                    className={`relative flex flex-col overflow-hidden rounded-lg border bg-zinc-900 text-left transition-all ${borderClass} ${
-                      isSelected ? 'ring-2 ring-violet-500' : ''
-                    }`}
+                    className={`group relative flex flex-col overflow-hidden rounded-lg border bg-zinc-900 text-left transition-all ${borderClass} ${
+                      isActive ? 'ring-2 ring-violet-500' : ''
+                    } ${isChecked ? 'ring-2 ring-blue-400' : ''}`}
                   >
                     {/* Thumbnail area */}
                     <div className="relative aspect-video w-full bg-zinc-800">
@@ -98,9 +115,28 @@ export function StoryboardGrid({
                       <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-mono text-zinc-300">
                         {shot.manifest.id}
                       </span>
+                      {/* Multi-select checkbox */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onToggleSelect(shot.manifest.id)
+                        }}
+                        className={`absolute right-1.5 top-1.5 rounded p-0.5 transition-opacity ${
+                          isChecked
+                            ? 'bg-blue-500 opacity-100'
+                            : 'bg-black/50 opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        {isChecked ? (
+                          <CheckSquare className="h-3.5 w-3.5 text-white" />
+                        ) : (
+                          <Square className="h-3.5 w-3.5 text-white/70" />
+                        )}
+                      </button>
                       {/* Approved badge */}
                       {shot.status === 'approved' && (
-                        <span className="absolute right-1.5 top-1.5 rounded-full bg-green-500 p-0.5">
+                        <span className="absolute bottom-1.5 left-1.5 rounded-full bg-green-500 p-0.5">
                           <Check className="h-3 w-3 text-white" />
                         </span>
                       )}

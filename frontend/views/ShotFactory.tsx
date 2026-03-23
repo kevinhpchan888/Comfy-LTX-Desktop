@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   Image, Play, CheckCircle2, FolderOutput,
   Settings, MessageSquare, AlertTriangle,
+  Plus, Trash2, CheckSquare, X,
 } from 'lucide-react'
 import { useFactory } from '../contexts/FactoryContext'
 import { ManifestImporter } from '../components/factory/ManifestImporter'
@@ -11,6 +12,7 @@ import { ComparisonViewer } from '../components/factory/ComparisonViewer'
 import { FactoryProgressBar } from '../components/factory/FactoryProgressBar'
 import { CreativeConsole } from '../components/factory/CreativeConsole'
 import { FactorySettings } from '../components/factory/FactorySettings'
+import { NewShotDialog } from '../components/factory/NewShotDialog'
 import { useAppSettings } from '../contexts/AppSettingsContext'
 
 export function ShotFactory() {
@@ -31,6 +33,7 @@ export function ShotFactory() {
     renderAllVideos,
     approveIteration,
     toggleShotEnabled,
+    updateShotManifest,
     organizeOutput,
     gpuInfo,
     refreshGpuInfo,
@@ -39,15 +42,25 @@ export function ShotFactory() {
     sendChatMessage,
     applyShotPreview,
     isChatStreaming,
+    // Multi-select
+    selectedShotIds,
+    toggleShotSelection,
+    selectShotRange,
+    selectAllShots,
+    deselectAllShots,
+    deleteShots,
+    addNewShot,
   } = useFactory()
 
   const { settings, updateSettings } = useAppSettings()
   const [comparisonShotId, setComparisonShotId] = useState<string | null>(null)
   const [showConsole, setShowConsole] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showNewShot, setShowNewShot] = useState(false)
 
   const selectedShot = shots.find(s => s.manifest.id === selectedShotId) || null
   const comparisonShot = shots.find(s => s.manifest.id === comparisonShotId) || null
+  const hasMultiSelect = selectedShotIds.size > 0
 
   // Ctrl+K toggles creative console
   useEffect(() => {
@@ -56,10 +69,28 @@ export function ShotFactory() {
         e.preventDefault()
         setShowConsole(prev => !prev)
       }
+      // Delete key removes selected shots
+      if ((e.key === 'Delete' || e.key === 'Backspace') && hasMultiSelect && !e.ctrlKey) {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+        e.preventDefault()
+        deleteShots([...selectedShotIds])
+      }
+      // Ctrl+A selects all
+      if (e.ctrlKey && e.key === 'a' && manifest) {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+        e.preventDefault()
+        selectAllShots()
+      }
+      // Escape deselects
+      if (e.key === 'Escape' && hasMultiSelect) {
+        deselectAllShots()
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [hasMultiSelect, selectedShotIds, deleteShots, selectAllShots, deselectAllShots, manifest])
 
   const handleTestConnection = useCallback(async () => {
     const { createLLMService } = await import('../lib/llm-service')
@@ -87,6 +118,38 @@ export function ShotFactory() {
 
   return (
     <div className="h-full flex flex-col bg-zinc-950">
+      {/* Selection toolbar — appears when shots are checkbox-selected */}
+      {hasMultiSelect && (
+        <div className="flex items-center gap-3 border-b border-blue-500/30 bg-blue-500/10 px-4 py-2">
+          <CheckSquare className="h-4 w-4 text-blue-400" />
+          <span className="text-sm font-medium text-blue-300">
+            {selectedShotIds.size} shot{selectedShotIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-2 ml-4">
+            <button
+              onClick={selectAllShots}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-800"
+            >
+              <CheckSquare className="h-3 w-3" />
+              Select All
+            </button>
+            <button
+              onClick={() => deleteShots([...selectedShotIds])}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 transition-colors hover:bg-red-500/10"
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete ({selectedShotIds.size})
+            </button>
+          </div>
+          <button
+            onClick={deselectAllShots}
+            className="ml-auto rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Three-panel layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel — Project Info + Actions */}
@@ -173,6 +236,13 @@ export function ShotFactory() {
               onClick={organizeOutput}
               disabled={stats.rendered === 0 || isProcessing}
             />
+            {/* Add Shot button */}
+            <ActionButton
+              icon={<Plus className="h-3.5 w-3.5" />}
+              label="Add Shot"
+              onClick={() => setShowNewShot(true)}
+              disabled={isProcessing}
+            />
             <div className="flex gap-1.5 pt-1">
               <button
                 onClick={() => setShowSettings(true)}
@@ -205,7 +275,10 @@ export function ShotFactory() {
           <StoryboardGrid
             shots={shots}
             selectedShotId={selectedShotId}
+            selectedShotIds={selectedShotIds}
             onSelect={selectShot}
+            onToggleSelect={toggleShotSelection}
+            onRangeSelect={selectShotRange}
             onDoubleClick={setComparisonShotId}
             gpuWarnings={gpuWarnings}
           />
@@ -231,6 +304,8 @@ export function ShotFactory() {
               onRenderVideo={() => renderVideo(selectedShot.manifest.id)}
               onApprove={(idx) => approveIteration(selectedShot.manifest.id, idx)}
               onToggleEnabled={() => toggleShotEnabled(selectedShot.manifest.id)}
+              onUpdateManifest={(updates) => updateShotManifest(selectedShot.manifest.id, updates)}
+              onDelete={() => deleteShots([selectedShot.manifest.id])}
             />
           </div>
         ) : (
@@ -278,6 +353,17 @@ export function ShotFactory() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* New Shot Dialog */}
+      {showNewShot && (
+        <NewShotDialog
+          existingIds={shots.map(s => s.manifest.id)}
+          nextOrder={shots.length > 0 ? Math.max(...shots.map(s => s.manifest.order)) + 1 : 1}
+          defaultScene={selectedShot?.manifest.scene || shots[0]?.manifest.scene || 'New Scene'}
+          onAdd={addNewShot}
+          onClose={() => setShowNewShot(false)}
+        />
       )}
     </div>
   )

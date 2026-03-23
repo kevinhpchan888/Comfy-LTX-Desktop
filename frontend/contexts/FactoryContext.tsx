@@ -35,7 +35,17 @@ interface FactoryContextType {
   selectedShotId: string | null
   selectShot: (id: string | null) => void
   updateShot: (id: string, updates: Partial<FactoryShot>) => void
+  updateShotManifest: (id: string, updates: Partial<ManifestShot>) => void
   toggleShotEnabled: (id: string) => void
+
+  // Multi-select & management
+  selectedShotIds: Set<string>
+  toggleShotSelection: (id: string) => void
+  selectShotRange: (toId: string) => void
+  selectAllShots: () => void
+  deselectAllShots: () => void
+  deleteShots: (ids: string[]) => void
+  addNewShot: (shot: ManifestShot) => void
 
   // Frame generation
   generateFrame: (shotId: string) => Promise<void>
@@ -89,6 +99,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   const [manifest, setManifest] = useState<FactoryManifest | null>(null)
   const [shots, setShots] = useState<FactoryShot[]>([])
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
+  const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set())
 
   // Pipeline state
   const [phase, setPhase] = useState<FactoryPhase>('idle')
@@ -125,6 +136,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     setManifest(result.manifest)
     setShots(newShots)
     setSelectedShotId(newShots.length > 0 ? newShots[0].manifest.id : null)
+    setSelectedShotIds(new Set())
     setPhase('idle')
     setProgress(INITIAL_PROGRESS)
     setChatMessages([])
@@ -143,6 +155,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     setManifest(null)
     setShots([])
     setSelectedShotId(null)
+    setSelectedShotIds(new Set())
     setPhase('idle')
     setProgress(INITIAL_PROGRESS)
     setChatMessages([])
@@ -173,6 +186,92 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
         status: newEnabled ? 'idle' : 'disabled',
       }
     }))
+  }, [])
+
+  const updateShotManifest = useCallback((id: string, updates: Partial<ManifestShot>) => {
+    setShots(prev => prev.map(s =>
+      s.manifest.id === id ? { ...s, manifest: { ...s.manifest, ...updates } } : s
+    ))
+    setManifest(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        shots: prev.shots.map(s => s.id === id ? { ...s, ...updates } : s),
+      }
+    })
+  }, [])
+
+  // ─── Multi-select & Management ────────────────────────────────────────────
+
+  const toggleShotSelection = useCallback((id: string) => {
+    setSelectedShotIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const selectShotRange = useCallback((toId: string) => {
+    if (!selectedShotId) {
+      setSelectedShotIds(new Set([toId]))
+      return
+    }
+    const fromIdx = shots.findIndex(s => s.manifest.id === selectedShotId)
+    const toIdx = shots.findIndex(s => s.manifest.id === toId)
+    if (fromIdx === -1 || toIdx === -1) return
+    const start = Math.min(fromIdx, toIdx)
+    const end = Math.max(fromIdx, toIdx)
+    const ids = shots.slice(start, end + 1).map(s => s.manifest.id)
+    setSelectedShotIds(new Set(ids))
+  }, [shots, selectedShotId])
+
+  const selectAllShots = useCallback(() => {
+    setSelectedShotIds(new Set(shots.map(s => s.manifest.id)))
+  }, [shots])
+
+  const deselectAllShots = useCallback(() => {
+    setSelectedShotIds(new Set())
+  }, [])
+
+  const deleteShots = useCallback((ids: string[]) => {
+    const idSet = new Set(ids)
+    setShots(prev => prev.filter(s => !idSet.has(s.manifest.id)))
+    setManifest(prev => {
+      if (!prev) return prev
+      return { ...prev, shots: prev.shots.filter(s => !idSet.has(s.id)) }
+    })
+    // Clear selection for deleted shots
+    setSelectedShotIds(prev => {
+      const next = new Set(prev)
+      for (const id of ids) next.delete(id)
+      return next
+    })
+    // If the active shot was deleted, clear it
+    if (selectedShotId && idSet.has(selectedShotId)) {
+      setSelectedShotId(null)
+    }
+  }, [selectedShotId])
+
+  const addNewShot = useCallback((shotData: ManifestShot) => {
+    const newFactoryShot: FactoryShot = {
+      manifest: shotData,
+      status: shotData.enabled === false ? 'disabled' : 'idle',
+      frameIterations: [],
+      activeFrameIndex: -1,
+      videoIterations: [],
+      activeVideoIndex: -1,
+    }
+    setShots(prev => {
+      const updated = [...prev, newFactoryShot]
+      updated.sort((a, b) => a.manifest.order - b.manifest.order)
+      return updated
+    })
+    setManifest(prev => {
+      if (!prev) return prev
+      return { ...prev, shots: [...prev.shots, shotData] }
+    })
+    setSelectedShotId(shotData.id)
   }, [])
 
   // ─── Frame Generation ────────────────────────────────────────────────────
@@ -695,7 +794,15 @@ ${JSON.stringify(manifest, null, 2)}`
     selectedShotId,
     selectShot,
     updateShot,
+    updateShotManifest,
     toggleShotEnabled,
+    selectedShotIds,
+    toggleShotSelection,
+    selectShotRange,
+    selectAllShots,
+    deselectAllShots,
+    deleteShots,
+    addNewShot,
     generateFrame,
     generateAllFrames,
     renderVideo,
