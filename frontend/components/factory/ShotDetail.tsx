@@ -37,6 +37,7 @@ interface ShotDetailProps {
   onImageDoubleClick?: () => void
   onUploadImage: (filePath: string) => void
   onUseWebImage: (url: string, attribution?: string) => void
+  onRemotionRequest: (description: string) => void
   pexelsApiKey: string
   autoRenderAll: boolean
   onToggleAutoRender: () => void
@@ -85,6 +86,7 @@ export function ShotDetail({
   onImageDoubleClick,
   onUploadImage,
   onUseWebImage,
+  onRemotionRequest,
   pexelsApiKey,
   autoRenderAll,
   onToggleAutoRender,
@@ -269,6 +271,8 @@ export function ShotDetail({
             }}
             pexelsApiKey={pexelsApiKey}
             defaultQuery={m.description || m.video.prompt.slice(0, 80)}
+            shotId={m.id}
+            onRemotionRequest={onRemotionRequest}
           />
         )}
         {/* First frame prompt (editable) */}

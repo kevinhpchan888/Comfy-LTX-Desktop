@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
-import { Upload, Search, ExternalLink, Loader2, ImageIcon } from 'lucide-react'
+import { Upload, Search, ExternalLink, Loader2, ImageIcon, Clapperboard } from 'lucide-react'
 
-type ImageTab = 'upload' | 'pexels' | 'google'
+type ImageTab = 'upload' | 'pexels' | 'google' | 'remotion'
 
 interface PexelsPhoto {
   id: number
@@ -28,6 +28,10 @@ interface ImageSearchPanelProps {
   pexelsApiKey: string
   /** Default search query (e.g. shot description) */
   defaultQuery?: string
+  /** Shot ID for Remotion requests */
+  shotId?: string
+  /** Called when user requests a Remotion motion graphic generation */
+  onRemotionRequest?: (description: string) => void
 }
 
 export function ImageSearchPanel({
@@ -35,6 +39,8 @@ export function ImageSearchPanel({
   onSelectWebImage,
   pexelsApiKey,
   defaultQuery = '',
+  shotId,
+  onRemotionRequest,
 }: ImageSearchPanelProps) {
   const [activeTab, setActiveTab] = useState<ImageTab>('upload')
 
@@ -54,6 +60,10 @@ export function ImageSearchPanel({
           <Search className="h-3 w-3" />
           Google
         </TabButton>
+        <TabButton active={activeTab === 'remotion'} onClick={() => setActiveTab('remotion')}>
+          <Clapperboard className="h-3 w-3" />
+          Remotion
+        </TabButton>
       </div>
 
       {/* Tab content */}
@@ -70,6 +80,14 @@ export function ImageSearchPanel({
         )}
         {activeTab === 'google' && (
           <GoogleTab defaultQuery={defaultQuery} />
+        )}
+        {activeTab === 'remotion' && (
+          <RemotionTab
+            defaultDescription={defaultQuery}
+            shotId={shotId}
+            onSelectFile={onSelectLocalFile}
+            onRequest={onRemotionRequest}
+          />
         )}
       </div>
     </div>
@@ -328,6 +346,107 @@ function GoogleTab({ defaultQuery }: { defaultQuery: string }) {
           <Search className="h-3.5 w-3.5" />
           Search Google Images
           <ExternalLink className="h-3 w-3 text-zinc-400" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Remotion Tab ────────────────────────────────────────────────────────────
+
+function RemotionTab({
+  defaultDescription,
+  shotId,
+  onSelectFile,
+  onRequest,
+}: {
+  defaultDescription: string
+  shotId?: string
+  onSelectFile: (path: string) => void
+  onRequest?: (description: string) => void
+}) {
+  const [description, setDescription] = useState(defaultDescription)
+  const [submitted, setSubmitted] = useState(false)
+
+  const handleSubmitRequest = () => {
+    if (!description.trim()) return
+    onRequest?.(description.trim())
+    setSubmitted(true)
+  }
+
+  const handlePickRenderedFile = useCallback(async () => {
+    const files = await window.electronAPI.showOpenFileDialog({
+      title: 'Select Remotion Rendered Frame',
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    })
+    if (files && files.length > 0) {
+      onSelectFile(files[0])
+    }
+  }, [onSelectFile])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded bg-gradient-to-r from-violet-500/10 to-blue-500/10 border border-violet-500/20 p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Clapperboard className="h-4 w-4 text-violet-400" />
+          <span className="text-xs font-medium text-violet-300">Remotion Motion Graphics</span>
+        </div>
+        <p className="text-[10px] text-zinc-400 leading-relaxed">
+          Generate motion graphics with Remotion. Describe what you want below — Claude Code
+          (via MCP) will write a Remotion composition, render it, and produce a frame or video.
+        </p>
+      </div>
+
+      {/* Description input */}
+      <div>
+        <label className="text-[10px] font-medium text-zinc-500 mb-1 block">
+          Motion Graphic Description {shotId && <span className="text-zinc-600">({shotId})</span>}
+        </label>
+        <textarea
+          value={description}
+          onChange={e => { setDescription(e.target.value); setSubmitted(false) }}
+          placeholder="e.g. Title card with 'THE EMPIRE THAT DROWNED IN GOLD' in elegant serif font, gold text on black background with subtle particle effects..."
+          rows={4}
+          className="w-full resize-none rounded border border-zinc-700 bg-zinc-800 px-2.5 py-2 text-xs text-zinc-200 outline-none placeholder:text-zinc-500 focus:border-violet-500"
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleSubmitRequest}
+          disabled={!description.trim() || submitted}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded py-2 text-xs font-medium transition-colors ${
+            submitted
+              ? 'bg-green-600/20 text-green-400 border border-green-500/30'
+              : 'bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50'
+          }`}
+        >
+          <Clapperboard className="h-3 w-3" />
+          {submitted ? 'Request Sent to Claude Code' : 'Request via Claude Code'}
+        </button>
+      </div>
+
+      {submitted && (
+        <div className="rounded bg-zinc-800 p-2.5 text-[10px] text-zinc-400 leading-relaxed">
+          The request has been saved to the factory status file. When Claude Code is connected
+          via MCP, it will pick up the request and generate the Remotion composition.
+          Once rendered, use <strong className="text-zinc-300">Import Rendered</strong> below to load the output.
+        </div>
+      )}
+
+      <div className="border-t border-zinc-800 pt-3">
+        <p className="text-[10px] text-zinc-500 mb-2">
+          Already have a Remotion-rendered frame?
+        </p>
+        <button
+          onClick={handlePickRenderedFile}
+          className="flex w-full items-center justify-center gap-1.5 rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+        >
+          <Upload className="h-3 w-3" />
+          Import Rendered Frame
         </button>
       </div>
     </div>

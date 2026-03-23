@@ -946,6 +946,95 @@ async def watch_factory_errors(project_path: str, poll_interval: float = 10.0, m
     })
 
 
+# ─── Remotion Motion Graphics ────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def get_remotion_requests(project_path: str) -> str:
+    """Read pending Remotion motion graphics requests from the Shot Factory.
+
+    Users can request Remotion-generated motion graphics (title cards, transitions,
+    animated elements) from the Factory UI. These requests are saved to a JSON file
+    that Claude Code should poll and fulfill.
+
+    Args:
+        project_path: Absolute path to the project directory.
+
+    Returns:
+        JSON array of pending requests, each with:
+        - shotId: Which shot needs the frame
+        - description: What motion graphic to create
+        - scene: Which scene the shot belongs to
+        - status: 'pending' or 'complete'
+        - timestamp: When the request was made
+
+    Workflow:
+    1. Call this tool to check for pending requests
+    2. For each pending request, write a Remotion composition matching the description
+    3. Render the composition with `npx remotion render`
+    4. Use the rendered frame as the shot's image (upload via the Factory UI)
+    5. Mark the request as complete using complete_remotion_request
+    """
+    requests_path = Path(project_path) / "factory" / ".remotion-requests.json"
+    if not requests_path.exists():
+        return json.dumps({"requests": [], "message": "No Remotion requests found"})
+
+    try:
+        data = json.loads(requests_path.read_text())
+        pending = [r for r in data if r.get("status") == "pending"]
+        return json.dumps({
+            "total": len(data),
+            "pending": len(pending),
+            "requests": data,
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to read requests: {e}"})
+
+
+@mcp.tool()
+async def complete_remotion_request(
+    project_path: str,
+    shot_id: str,
+    rendered_path: str,
+) -> str:
+    """Mark a Remotion request as complete after rendering.
+
+    Args:
+        project_path: Absolute path to the project directory.
+        shot_id: The shot ID that was rendered.
+        rendered_path: Absolute path to the rendered frame/image.
+
+    Updates the request status to 'complete' and records the output path.
+    """
+    requests_path = Path(project_path) / "factory" / ".remotion-requests.json"
+    if not requests_path.exists():
+        return json.dumps({"error": "No requests file found"})
+
+    try:
+        data = json.loads(requests_path.read_text())
+        found = False
+        for req in data:
+            if req.get("shotId") == shot_id:
+                req["status"] = "complete"
+                req["renderedPath"] = rendered_path
+                req["completedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                found = True
+                break
+
+        if not found:
+            return json.dumps({"error": f"No request found for shot {shot_id}"})
+
+        requests_path.write_text(json.dumps(data, indent=2))
+        return json.dumps({
+            "status": "ok",
+            "shot_id": shot_id,
+            "rendered_path": rendered_path,
+            "message": f"Request for {shot_id} marked as complete. User can now import the rendered frame via Upload in the Factory UI.",
+        })
+    except Exception as e:
+        return json.dumps({"error": f"Failed to update request: {e}"})
+
+
 # ─── Run Server ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

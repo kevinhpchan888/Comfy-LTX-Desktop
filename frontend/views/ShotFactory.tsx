@@ -32,6 +32,7 @@ export function ShotFactory() {
     generateAllFrames,
     uploadFrameImage,
     useWebImage,
+    requestRemotionFrame,
     renderVideo,
     renderAllVideos,
     approveIteration,
@@ -374,6 +375,7 @@ export function ShotFactory() {
               onImageDoubleClick={() => setLightboxShotId(selectedShot.manifest.id)}
               onUploadImage={(filePath) => uploadFrameImage(selectedShot.manifest.id, filePath)}
               onUseWebImage={(url, attr) => useWebImage(selectedShot.manifest.id, url, attr)}
+              onRemotionRequest={(desc) => requestRemotionFrame(selectedShot.manifest.id, desc)}
               pexelsApiKey={settings.factoryPexelsApiKey}
               autoRenderAll={autoRenderAll}
               onToggleAutoRender={() => toggleShotAutoRender(selectedShot.manifest.id)}

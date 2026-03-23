@@ -56,6 +56,7 @@ interface FactoryContextType {
   generateAllFrames: () => Promise<void>
   uploadFrameImage: (shotId: string, filePath: string) => Promise<void>
   useWebImage: (shotId: string, imageUrl: string, attribution?: string) => Promise<void>
+  requestRemotionFrame: (shotId: string, description: string) => void
 
   // Video rendering
   renderVideo: (shotId: string) => Promise<void>
@@ -632,6 +633,45 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       ))
     }
   }, [getProjectPath])
+
+  /** Write a Remotion motion graphic request for Claude Code to pick up via MCP. */
+  const requestRemotionFrame = useCallback((shotId: string, description: string) => {
+    const projectPath = currentProject?.assetSavePath
+    if (!projectPath) return
+
+    const requestsPath = `${projectPath}/factory/.remotion-requests.json`
+    const request = {
+      shotId,
+      description,
+      timestamp: new Date().toISOString(),
+      status: 'pending' as const,
+      scene: shotsRef.current.find(s => s.manifest.id === shotId)?.manifest.scene || '',
+    }
+
+    // Read existing requests, append, write back
+    void (async () => {
+      try {
+        await window.electronAPI.ensureDirectory(`${projectPath}/factory`)
+        let existing: typeof request[] = []
+        try {
+          const raw = await fetch(`file://${requestsPath.replace(/\\/g, '/')}`)
+          if (raw.ok) existing = await raw.json() as typeof request[]
+        } catch {
+          // File doesn't exist yet
+        }
+        // Replace existing request for same shot or append
+        const idx = existing.findIndex(r => r.shotId === shotId)
+        if (idx >= 0) {
+          existing[idx] = request
+        } else {
+          existing.push(request)
+        }
+        await window.electronAPI.saveFile(requestsPath, JSON.stringify(existing, null, 2))
+      } catch (err) {
+        console.error('[Factory] Failed to write Remotion request:', err)
+      }
+    })()
+  }, [currentProject])
 
   // ─── Video Rendering ─────────────────────────────────────────────────────
 
@@ -1253,6 +1293,7 @@ ${JSON.stringify(manifest, null, 2)}`
     generateAllFrames,
     uploadFrameImage,
     useWebImage,
+    requestRemotionFrame,
     renderVideo,
     renderAllVideos,
     approveIteration,
