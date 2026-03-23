@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   Image, Play, CheckCircle2, FolderOutput,
   Settings, MessageSquare, AlertTriangle,
-  Plus, Trash2, CheckSquare, X, Send, Film,
+  Plus, Trash2, CheckSquare, X, Send, Film, GripVertical, Pencil,
 } from 'lucide-react'
 import { useFactory } from '../contexts/FactoryContext'
 import { ManifestImporter } from '../components/factory/ManifestImporter'
@@ -58,6 +58,7 @@ export function ShotFactory() {
     sendToEditor,
     sendToEditorAndExport,
     reorderShots,
+    renameScene,
     autoRenderAll,
     setAutoRenderAll,
     toggleShotAutoRender,
@@ -70,6 +71,9 @@ export function ShotFactory() {
   const [showNewShot, setShowNewShot] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [lightboxShotId, setLightboxShotId] = useState<string | null>(null)
+  const [editingScene, setEditingScene] = useState<string | null>(null)
+  const [editSceneValue, setEditSceneValue] = useState('')
+  const [dragShotId, setDragShotId] = useState<string | null>(null)
   const lightboxShot = shots.find(s => s.manifest.id === lightboxShotId) || null
 
   const selectedShot = shots.find(s => s.manifest.id === selectedShotId) || null
@@ -212,27 +216,71 @@ export function ShotFactory() {
             </div>
           )}
 
-          {/* Scene tree (scrollable) */}
+          {/* Scene tree (scrollable) with drag-to-reorder */}
           <div className="flex-1 overflow-y-auto px-2 py-2">
             {Array.from(new Set(shots.map(s => s.manifest.scene))).map(scene => {
               const sceneShots = shots.filter(s => s.manifest.scene === scene)
               return (
                 <div key={scene} className="mb-2">
-                  <p className="text-[10px] text-zinc-500 font-medium px-1 mb-1 uppercase tracking-wide">{scene}</p>
-                  {sceneShots.map(shot => (
-                    <button
-                      key={shot.manifest.id}
-                      onClick={() => selectShot(shot.manifest.id)}
-                      className={`w-full flex items-center gap-1.5 px-2 py-1 rounded text-left text-[11px] transition-colors ${
-                        selectedShotId === shot.manifest.id
-                          ? 'bg-zinc-800 text-white'
-                          : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-                      }`}
+                  {/* Scene header — double-click to rename */}
+                  {editingScene === scene ? (
+                    <input
+                      value={editSceneValue}
+                      onChange={e => setEditSceneValue(e.target.value)}
+                      onBlur={() => { renameScene(scene, editSceneValue); setEditingScene(null) }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { renameScene(scene, editSceneValue); setEditingScene(null) }
+                        if (e.key === 'Escape') setEditingScene(null)
+                      }}
+                      autoFocus
+                      className="w-full bg-zinc-800 border border-violet-500 rounded px-1 py-0.5 mb-1 text-[10px] text-white outline-none uppercase tracking-wide"
+                    />
+                  ) : (
+                    <div
+                      className="flex items-center justify-between group px-1 mb-1 cursor-default"
+                      onDoubleClick={() => { setEditingScene(scene); setEditSceneValue(scene) }}
+                      title="Double-click to rename"
                     >
-                      <ShotStatusDot status={shot.status} />
-                      <span className="truncate">{shot.manifest.id}</span>
-                    </button>
-                  ))}
+                      <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wide">{scene}</p>
+                      <button
+                        onClick={() => { setEditingScene(scene); setEditSceneValue(scene) }}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-zinc-700 text-zinc-600 hover:text-zinc-300 transition-all"
+                      >
+                        <Pencil className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  )}
+                  {/* Shot list with drag handles */}
+                  {sceneShots.map(shot => {
+                    const globalIndex = shots.findIndex(s => s.manifest.id === shot.manifest.id)
+                    return (
+                      <div
+                        key={shot.manifest.id}
+                        draggable
+                        onDragStart={() => setDragShotId(shot.manifest.id)}
+                        onDragEnd={() => setDragShotId(null)}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={() => {
+                          if (!dragShotId || dragShotId === shot.manifest.id) return
+                          const fromIdx = shots.findIndex(s => s.manifest.id === dragShotId)
+                          if (fromIdx >= 0 && globalIndex >= 0) reorderShots(fromIdx, globalIndex)
+                          setDragShotId(null)
+                        }}
+                        onClick={() => selectShot(shot.manifest.id)}
+                        className={`flex items-center gap-1 px-1 py-1 rounded text-left text-[11px] transition-colors cursor-pointer ${
+                          dragShotId === shot.manifest.id ? 'opacity-40' : ''
+                        } ${
+                          selectedShotId === shot.manifest.id
+                            ? 'bg-zinc-800 text-white'
+                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                        }`}
+                      >
+                        <GripVertical className="h-3 w-3 text-zinc-600 cursor-grab shrink-0" />
+                        <ShotStatusDot status={shot.status} />
+                        <span className="truncate">{shot.manifest.id}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               )
             })}

@@ -36,6 +36,10 @@ export class ComfyUIProgressTracker {
   private completionResolve: ((value: GenerationProgress) => void) | null = null
   private completionReject: ((reason: Error) => void) | null = null
   private intentionalDisconnect = false
+  private clientId: string | null = null
+  private pingInterval: ReturnType<typeof setInterval> | null = null
+  private reconnectAttempts = 0
+  private maxReconnectAttempts = 3
 
   private stageIndex = 0
   private lastValue: number | null = null
@@ -75,11 +79,28 @@ export class ComfyUIProgressTracker {
     this.stageIndex = 0
     this.lastValue = null
     this.intentionalDisconnect = false
+    this.clientId = clientId
+    this.reconnectAttempts = 0
 
+    this.connectWebSocket(clientId)
+  }
+
+  private connectWebSocket(clientId: string): void {
     const wsUrl = `${this.baseUrl}/ws?clientId=${clientId}`
     logger.info(`ComfyUI WebSocket connecting to ${wsUrl}`)
 
     this.ws = new WebSocket(wsUrl)
+
+    this.ws.on('open', () => {
+      this.reconnectAttempts = 0
+      // Keepalive ping every 30 seconds to prevent idle timeout
+      this.stopPing()
+      this.pingInterval = setInterval(() => {
+        if (this.ws?.readyState === WebSocket.OPEN) {
+          this.ws.ping()
+        }
+      }, 30_000)
+    })
 
     this.ws.on('message', (data: WebSocket.Data) => {
       try {
@@ -92,20 +113,45 @@ export class ComfyUIProgressTracker {
 
     this.ws.on('error', (err) => {
       logger.error(`ComfyUI WebSocket error: ${err.message}`)
-      this.rejectCompletion(new Error(`WebSocket error: ${err.message}`))
+      // Don't reject immediately — let the close handler decide whether to reconnect
     })
 
     this.ws.on('close', () => {
       logger.info('ComfyUI WebSocket closed')
-      // Only reject if this was an unexpected close (not our own disconnect())
-      if (!this.intentionalDisconnect && this.completionResolve) {
-        this.rejectCompletion(new Error('WebSocket connection closed before generation completed'))
+      this.stopPing()
+
+      // If intentional disconnect, do nothing
+      if (this.intentionalDisconnect) return
+
+      // If we're still waiting for completion, try to reconnect
+      if (this.completionResolve && this.clientId) {
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++
+          const delay = this.reconnectAttempts * 2000
+          logger.info(`ComfyUI WebSocket reconnecting (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms...`)
+          setTimeout(() => {
+            if (!this.intentionalDisconnect && this.clientId) {
+              this.connectWebSocket(this.clientId)
+            }
+          }, delay)
+        } else {
+          logger.error('ComfyUI WebSocket reconnection attempts exhausted')
+          this.rejectCompletion(new Error('WebSocket connection lost after multiple reconnection attempts'))
+        }
       }
     })
   }
 
+  private stopPing(): void {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval)
+      this.pingInterval = null
+    }
+  }
+
   disconnect(): void {
     this.intentionalDisconnect = true
+    this.stopPing()
     if (this.ws) {
       try {
         this.ws.close()
@@ -114,6 +160,7 @@ export class ComfyUIProgressTracker {
       }
       this.ws = null
     }
+    this.clientId = null
   }
 
   private getStageLabel(): string {
@@ -240,7 +287,7 @@ export class ComfyUIProgressTracker {
     return { ...this.progress }
   }
 
-  waitForCompletion(promptId: string, timeoutMs = 10 * 60 * 1000): Promise<GenerationProgress> {
+  waitForCompletion(promptId: string, timeoutMs = 15 * 60 * 1000): Promise<GenerationProgress> {
     this.activePromptId = promptId
 
     return new Promise<GenerationProgress>((resolve, reject) => {

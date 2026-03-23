@@ -13,6 +13,8 @@ import type {
 } from '../types/factory'
 import { parseManifest, manifestToShots, getShotStats, parseDuration } from '../lib/factory-manifest'
 import { saveFrame, saveVideo, organizeOutputs } from '../lib/factory-files'
+// Performance log utilities (used when tracking is added)
+// import { addPerfEntry, estimateApiCost } from '../lib/performance-log'
 import { copyToAssetFolder } from '../lib/asset-copy'
 import { DEFAULT_COLOR_CORRECTION } from '../types/project'
 import type { Asset, TimelineClip, Track } from '../types/project'
@@ -50,6 +52,7 @@ interface FactoryContextType {
   deleteShots: (ids: string[]) => void
   addNewShot: (shot: ManifestShot) => void
   reorderShots: (fromIndex: number, toIndex: number) => void
+  renameScene: (oldName: string, newName: string) => void
 
   // Frame generation
   generateFrame: (shotId: string) => Promise<void>
@@ -420,6 +423,16 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const renameScene = useCallback((oldName: string, newName: string) => {
+    if (!newName.trim() || oldName === newName) return
+    const trimmed = newName.trim()
+    setShots(prev => prev.map(s =>
+      s.manifest.scene === oldName
+        ? { ...s, manifest: { ...s.manifest, scene: trimmed, scene_slug: trimmed.toLowerCase().replace(/\s+/g, '_') } }
+        : s
+    ))
+  }, [])
+
   // ─── Frame Generation ────────────────────────────────────────────────────
 
   const generateFrame = useCallback(async (shotId: string) => {
@@ -457,7 +470,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
         projectName: manifestRef.current.project.name,
       })
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Image generation timed out after 5 minutes')), 5 * 60 * 1000)
+        setTimeout(() => reject(new Error('Image generation timed out after 10 minutes')), 10 * 60 * 1000)
       )
       const result = await Promise.race([genPromise, timeoutPromise])
 
@@ -1289,6 +1302,7 @@ ${JSON.stringify(manifest, null, 2)}`
     deleteShots,
     addNewShot,
     reorderShots,
+    renameScene,
     generateFrame,
     generateAllFrames,
     uploadFrameImage,
