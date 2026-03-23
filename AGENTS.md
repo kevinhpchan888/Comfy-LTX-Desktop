@@ -111,6 +111,11 @@ The server is auto-registered in `.claude/settings.json`. Requirements:
 | `list_output_files` | List generated files in a directory |
 | `suggest_gap_prompt` | AI-suggested transition prompts |
 | `list_ic_lora_models` | Available IC-LoRA style models |
+| `get_factory_status` | Read factory pipeline status + errors |
+| `diagnose_factory_errors` | Categorize errors and suggest fixes |
+| `watch_factory_errors` | Poll for new errors during batch ops |
+| `get_remotion_requests` | Read pending Remotion motion graphic requests |
+| `complete_remotion_request` | Mark a Remotion request as done after rendering |
 
 ### Autonomous Production Workflow
 
@@ -121,6 +126,22 @@ When asked to produce a video sequence, follow this loop:
 4. For failures: read the error, use `retry_failed_shot` (auto-adjusts params)
 5. `inspect_video_file` → verify outputs exist
 6. `list_output_files` → inventory final deliverables
+
+### Proactive Error Monitoring
+
+The frontend writes `.factory-status.json` to `<project>/factory/` whenever shot states change.
+Use the MCP monitoring tools to detect and fix errors automatically:
+
+1. `get_factory_status` → read current shot counts and any errors
+2. `diagnose_factory_errors` → categorize errors (OOM, connection, timeout, IPC) and get fix suggestions
+3. `watch_factory_errors` → poll during batch operations, returns immediately when new errors appear
+
+**Self-healing rules:**
+- OOM → reduce resolution or duration, retry
+- Timeout → switch to 'fast' model, retry
+- IPC "reply never sent" → transient WebSocket drop, retry the shot
+- Connection refused → inform user to restart LTX Desktop
+- Missing node → inform user to restart ComfyUI
 
 **Self-healing rules:**
 - OOM → reduce resolution or duration, retry
