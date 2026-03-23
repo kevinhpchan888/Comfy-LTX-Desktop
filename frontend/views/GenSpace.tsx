@@ -1669,18 +1669,40 @@ export function GenSpace() {
                 Stop Generation
               </button>
             ) : (
-              <button
-                onClick={() => { handleGenerate(); setIsPanelOpen(false) }}
-                disabled={!canSubmit}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  !canSubmit
-                    ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
-                    : 'bg-white text-black hover:bg-zinc-200'
-                }`}
-              >
-                <Sparkles className="h-4 w-4" />
-                {genMode === 'text-to-image' ? 'Generate Image' : 'Generate Video'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { handleGenerate(); setIsPanelOpen(false) }}
+                  disabled={!canSubmit}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    !canSubmit
+                      ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                      : 'bg-white text-black hover:bg-zinc-200'
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {genMode === 'text-to-image' ? 'Generate Image' : 'Generate Video'}
+                </button>
+                {mode !== 'retake' && (
+                  <button
+                    onClick={handleAddToQueue}
+                    disabled={!canSubmit}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      !canSubmit
+                        ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                        : 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600'
+                    }`}
+                    title="Add to batch queue"
+                  >
+                    <ListPlus className="h-4 w-4" />
+                    Queue
+                    {queue.filter(q => q.status === 'pending' || q.status === 'generating').length > 0 && (
+                      <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-violet-600 text-white text-[10px] leading-none">
+                        {queue.filter(q => q.status === 'pending' || q.status === 'generating').length}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
