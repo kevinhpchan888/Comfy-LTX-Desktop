@@ -61,6 +61,7 @@ export function ShotFactory() {
   const [showConsole, setShowConsole] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showNewShot, setShowNewShot] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [lightboxShotId, setLightboxShotId] = useState<string | null>(null)
   const lightboxShot = shots.find(s => s.manifest.id === lightboxShotId) || null
 
@@ -256,13 +257,25 @@ export function ShotFactory() {
               onClick={organizeOutput}
               disabled={stats.rendered === 0 || isProcessing}
             />
-            {/* Add Shot button */}
-            <ActionButton
-              icon={<Plus className="h-3.5 w-3.5" />}
-              label="Add Shot"
-              onClick={() => setShowNewShot(true)}
-              disabled={isProcessing}
-            />
+            {/* Add Shot / Clear All */}
+            <div className="flex gap-1.5">
+              <div className="flex-1">
+                <ActionButton
+                  icon={<Plus className="h-3.5 w-3.5" />}
+                  label="Add Shot"
+                  onClick={() => setShowNewShot(true)}
+                  disabled={isProcessing}
+                />
+              </div>
+              <div className="flex-1">
+                <ActionButton
+                  icon={<Trash2 className="h-3.5 w-3.5" />}
+                  label="Clear All"
+                  onClick={() => setShowClearConfirm(true)}
+                  disabled={isProcessing || shots.length === 0}
+                />
+              </div>
+            </div>
             <div className="flex gap-1.5 pt-1">
               <button
                 onClick={() => setShowSettings(true)}
@@ -402,9 +415,41 @@ export function ShotFactory() {
           existingIds={shots.map(s => s.manifest.id)}
           nextOrder={shots.length > 0 ? Math.max(...shots.map(s => s.manifest.order)) + 1 : 1}
           defaultScene={selectedShot?.manifest.scene || shots[0]?.manifest.scene || 'New Scene'}
+          scenes={[...new Set(shots.map(s => s.manifest.scene))]}
+          selectedShotId={selectedShotId}
           onAdd={addNewShot}
           onClose={() => setShowNewShot(false)}
         />
+      )}
+
+      {/* Clear All Confirmation */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-[400px] rounded-xl border border-zinc-700 bg-zinc-900 p-6">
+            <h3 className="text-sm font-semibold text-zinc-100 mb-2">Clear All Shots?</h3>
+            <p className="text-xs text-zinc-400 mb-4">
+              This will remove all {shots.length} shots and their generated frames/videos.
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  deleteShots(shots.map(s => s.manifest.id))
+                  setShowClearConfirm(false)
+                }}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500"
+              >
+                Clear All Shots
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

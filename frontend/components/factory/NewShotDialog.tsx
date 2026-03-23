@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { X } from 'lucide-react'
 import type { ManifestShot } from '../../types/factory'
 
@@ -6,13 +6,55 @@ interface NewShotDialogProps {
   existingIds: string[]
   nextOrder: number
   defaultScene: string
+  scenes: string[]
+  selectedShotId: string | null
   onAdd: (shot: ManifestShot) => void
   onClose: () => void
 }
 
-export function NewShotDialog({ existingIds, nextOrder, defaultScene, onAdd, onClose }: NewShotDialogProps) {
-  const [id, setId] = useState('')
+/** Given a selected shot ID and all existing IDs, suggest the next sequential ID.
+ *  e.g. "CO-03" selected → "CO-04", "A1-11" → "A1-12", "A1-06b" → "A1-06c" */
+function suggestNextId(selectedId: string | null, existingIds: string[]): string {
+  if (!selectedId) return ''
+
+  // Try pattern: prefix + number (e.g. "CO-03", "A1-11")
+  const numMatch = selectedId.match(/^(.+?)(\d+)$/)
+  if (numMatch) {
+    const prefix = numMatch[1]
+    const num = parseInt(numMatch[2], 10)
+    const padLen = numMatch[2].length
+
+    // Find the next available number
+    for (let next = num + 1; next < num + 100; next++) {
+      const candidate = `${prefix}${String(next).padStart(padLen, '0')}`
+      if (!existingIds.includes(candidate)) return candidate
+    }
+  }
+
+  // Try pattern: prefix + number + letter suffix (e.g. "A1-06b")
+  const letterMatch = selectedId.match(/^(.+?\d+)([a-z])$/)
+  if (letterMatch) {
+    const base = letterMatch[1]
+    const letter = letterMatch[2]
+    const nextLetter = String.fromCharCode(letter.charCodeAt(0) + 1)
+    if (nextLetter <= 'z') {
+      const candidate = `${base}${nextLetter}`
+      if (!existingIds.includes(candidate)) return candidate
+    }
+  }
+
+  return ''
+}
+
+export function NewShotDialog({ existingIds, nextOrder, defaultScene, scenes, selectedShotId, onAdd, onClose }: NewShotDialogProps) {
+  const suggestedId = useMemo(() => suggestNextId(selectedShotId, existingIds), [selectedShotId, existingIds])
+
+  const [id, setId] = useState(suggestedId)
+  const [sceneMode, setSceneMode] = useState<'existing' | 'custom'>(
+    scenes.includes(defaultScene) ? 'existing' : 'custom'
+  )
   const [scene, setScene] = useState(defaultScene)
+  const [customScene, setCustomScene] = useState('')
   const [description, setDescription] = useState('')
   const [videoPrompt, setVideoPrompt] = useState('')
   const [firstFramePrompt, setFirstFramePrompt] = useState('')
@@ -21,16 +63,18 @@ export function NewShotDialog({ existingIds, nextOrder, defaultScene, onAdd, onC
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [cameraMotion, setCameraMotion] = useState('none')
 
+  const effectiveScene = sceneMode === 'custom' ? customScene : scene
   const idError = id && existingIds.includes(id) ? 'ID already exists' : ''
-  const canSubmit = id.trim() && scene.trim() && videoPrompt.trim() && !idError
+  const canSubmit = id.trim() && effectiveScene.trim() && videoPrompt.trim() && !idError
 
   const handleSubmit = () => {
     if (!canSubmit) return
 
+    const finalScene = effectiveScene.trim()
     const shot: ManifestShot = {
       id: id.trim(),
-      scene: scene.trim(),
-      scene_slug: scene.trim().toLowerCase().replace(/\s+/g, '-'),
+      scene: finalScene,
+      scene_slug: finalScene.toLowerCase().replace(/\s+/g, '-'),
       description: description.trim(),
       act: 1,
       order: nextOrder,
@@ -99,14 +143,45 @@ export function NewShotDialog({ existingIds, nextOrder, defaultScene, onAdd, onC
                 placeholder="e.g. A1-01"
                 className="input-field"
               />
+              {suggestedId && id !== suggestedId && (
+                <button
+                  type="button"
+                  onClick={() => setId(suggestedId)}
+                  className="mt-1 text-[10px] text-violet-400 hover:text-violet-300"
+                >
+                  Suggest: {suggestedId}
+                </button>
+              )}
             </Field>
             <Field label="Scene" required>
-              <input
-                value={scene}
-                onChange={e => setScene(e.target.value)}
-                placeholder="e.g. Cold Open"
-                className="input-field"
-              />
+              <div className="flex flex-col gap-1.5">
+                <select
+                  value={sceneMode === 'custom' ? '__custom__' : scene}
+                  onChange={e => {
+                    if (e.target.value === '__custom__') {
+                      setSceneMode('custom')
+                    } else {
+                      setSceneMode('existing')
+                      setScene(e.target.value)
+                    }
+                  }}
+                  className="input-field"
+                >
+                  {scenes.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                  <option value="__custom__">+ New Scene...</option>
+                </select>
+                {sceneMode === 'custom' && (
+                  <input
+                    value={customScene}
+                    onChange={e => setCustomScene(e.target.value)}
+                    placeholder="Enter new scene name..."
+                    autoFocus
+                    className="input-field"
+                  />
+                )}
+              </div>
             </Field>
           </div>
 
