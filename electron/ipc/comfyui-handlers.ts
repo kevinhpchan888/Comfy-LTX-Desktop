@@ -15,7 +15,7 @@ import { getComfyUISettings } from './settings-handlers'
 import { findFfmpegPath } from '../export/ffmpeg-utils'
 import { getGpuInfo } from '../gpu'
 import { logger } from '../logger'
-import { approvePath } from '../path-validation'
+import { approvePath, stripFileUrl } from '../path-validation'
 
 // Helpers for reading/writing .renders.json (supports both old flat array and new wrapped format)
 function readRendersJson(rendersPath: string): Record<string, unknown>[] {
@@ -114,6 +114,11 @@ interface GenerateParams {
   projectName?: string
 }
 
+/** Convert a file:// URL to a filesystem path, or return as-is if already a path */
+function toFilePath(input: string): string {
+  return input.startsWith('file://') ? stripFileUrl(input) : input
+}
+
 let activePromptId: string | null = null
 
 export function registerComfyUIHandlers(): void {
@@ -129,11 +134,17 @@ export function registerComfyUIHandlers(): void {
       )
       const numFrames = params.imageMode ? 9 : calculateNumFrames(params.duration, params.fps)
 
-      // 2. Upload image if I2V
+      // 2. Resolve file:// URLs to filesystem paths
+      const imagePath = params.imagePath ? toFilePath(params.imagePath) : null
+      const middleImagePath = params.middleImagePath ? toFilePath(params.middleImagePath) : null
+      const lastImagePath = params.lastImagePath ? toFilePath(params.lastImagePath) : null
+      const audioPath = params.audioPath ? toFilePath(params.audioPath) : null
+
+      // 2a. Upload image if I2V
       let uploadedImage = null
-      if (params.imagePath && fs.existsSync(params.imagePath)) {
-        logger.info(`Uploading image to ComfyUI: ${params.imagePath}`)
-        uploadedImage = await comfyClient.uploadImage(params.imagePath)
+      if (imagePath && fs.existsSync(imagePath)) {
+        logger.info(`Uploading image to ComfyUI: ${imagePath}`)
+        uploadedImage = await comfyClient.uploadImage(imagePath)
         logger.info(
           `Image uploaded: ${uploadedImage.name} (${uploadedImage.subfolder})`,
         )
@@ -141,32 +152,32 @@ export function registerComfyUIHandlers(): void {
 
       // 2b. Upload middle frame if provided
       let uploadedMiddleImage = null
-      if (params.middleImagePath && fs.existsSync(params.middleImagePath)) {
-        logger.info(`Uploading middle frame to ComfyUI: ${params.middleImagePath}`)
-        uploadedMiddleImage = await comfyClient.uploadImage(params.middleImagePath)
+      if (middleImagePath && fs.existsSync(middleImagePath)) {
+        logger.info(`Uploading middle frame to ComfyUI: ${middleImagePath}`)
+        uploadedMiddleImage = await comfyClient.uploadImage(middleImagePath)
         logger.info(`Middle frame uploaded: ${uploadedMiddleImage.name}`)
       }
 
       // 2c. Upload last frame if provided
       let uploadedLastImage = null
-      if (params.lastImagePath && fs.existsSync(params.lastImagePath)) {
-        logger.info(`Uploading last frame to ComfyUI: ${params.lastImagePath}`)
-        uploadedLastImage = await comfyClient.uploadImage(params.lastImagePath)
+      if (lastImagePath && fs.existsSync(lastImagePath)) {
+        logger.info(`Uploading last frame to ComfyUI: ${lastImagePath}`)
+        uploadedLastImage = await comfyClient.uploadImage(lastImagePath)
         logger.info(`Last frame uploaded: ${uploadedLastImage.name}`)
       }
 
       // 2d. Upload audio if provided
       let uploadedAudio = null
-      if (params.audioPath && fs.existsSync(params.audioPath)) {
-        logger.info(`Uploading audio to ComfyUI: ${params.audioPath}`)
-        uploadedAudio = await comfyClient.uploadAudio(params.audioPath)
+      if (audioPath && fs.existsSync(audioPath)) {
+        logger.info(`Uploading audio to ComfyUI: ${audioPath}`)
+        uploadedAudio = await comfyClient.uploadAudio(audioPath)
         logger.info(
           `Audio uploaded: ${uploadedAudio.name} (${uploadedAudio.subfolder})`,
         )
       }
 
       // 2e. Read source image dimensions for aspect-ratio-aware scaling
-      const firstImagePath = params.imagePath || params.middleImagePath || params.lastImagePath
+      const firstImagePath = imagePath || middleImagePath || lastImagePath
       const sourceImageDims = firstImagePath ? getImageDimensions(firstImagePath) : null
       if (sourceImageDims) {
         logger.info(`Source image dimensions: ${sourceImageDims.width}x${sourceImageDims.height}`)

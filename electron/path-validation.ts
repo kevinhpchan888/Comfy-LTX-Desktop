@@ -6,7 +6,7 @@ function normalize(p: string): string {
   return isWindows ? path.resolve(p).toLowerCase() : path.resolve(p)
 }
 
-function stripFileUrl(fileUrl: string): string {
+export function stripFileUrl(fileUrl: string): string {
   let raw = fileUrl
   if (raw.startsWith('file:///')) raw = raw.slice(8)
   else if (raw.startsWith('file://')) raw = raw.slice(7)
