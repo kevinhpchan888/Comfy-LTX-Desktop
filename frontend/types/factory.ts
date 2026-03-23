@@ -185,12 +185,27 @@ export interface ShotIteration {
   createdAt: number
 }
 
+export type FrameSlot = 'first' | 'middle' | 'last'
+
+export interface FrameSlotData {
+  iterations: ShotIteration[]
+  activeIndex: number
+}
+
 export interface FactoryShot {
   manifest: ManifestShot
   status: ShotStatus
   error?: string
+  /** @deprecated Use frameSlots.first instead — kept for backward compat during migration */
   frameIterations: ShotIteration[]
+  /** @deprecated Use frameSlots.first.activeIndex instead */
   activeFrameIndex: number
+  /** Per-slot frame iterations: first, middle, last */
+  frameSlots?: {
+    first: FrameSlotData
+    middle: FrameSlotData
+    last: FrameSlotData
+  }
   videoIterations: ShotIteration[]
   activeVideoIndex: number
   queueItemId?: string

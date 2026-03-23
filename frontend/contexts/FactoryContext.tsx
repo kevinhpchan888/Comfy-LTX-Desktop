@@ -10,6 +10,7 @@ import type {
   ShotPreview,
   ManifestShot,
   ValidationWarning,
+  FrameSlot,
 } from '../types/factory'
 import { parseManifest, manifestToShots, getShotStats, parseDuration } from '../lib/factory-manifest'
 import { saveFrame, saveVideo, organizeOutputs } from '../lib/factory-files'
@@ -55,7 +56,7 @@ interface FactoryContextType {
   renameScene: (oldName: string, newName: string) => void
 
   // Frame generation
-  generateFrame: (shotId: string) => Promise<void>
+  generateFrame: (shotId: string, slot?: FrameSlot) => Promise<void>
   generateAllFrames: () => Promise<void>
   uploadFrameImage: (shotId: string, filePath: string) => Promise<void>
   useWebImage: (shotId: string, imageUrl: string, attribution?: string) => Promise<void>
@@ -436,7 +437,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Frame Generation ────────────────────────────────────────────────────
 
-  const generateFrame = useCallback(async (shotId: string) => {
+  const generateFrame = useCallback(async (shotId: string, slot: FrameSlot = 'first') => {
     const shot = shotsRef.current.find(s => s.manifest.id === shotId)
     if (!shot || !manifestRef.current) return
 
@@ -444,11 +445,18 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       s.manifest.id === shotId ? { ...s, status: 'generating-frame', error: undefined } : s
     ))
 
-    const frameConfig = shot.manifest.frames.first
-    // Use first-frame prompt if available, otherwise fall back to video prompt
-    const imagePrompt = (frameConfig && frameConfig.source === 'generate' && frameConfig.prompt)
-      ? frameConfig.prompt
-      : shot.manifest.video.prompt
+    // Select prompt based on slot
+    const frameConfig = shot.manifest.frames[slot]
+    let imagePrompt: string
+    if (frameConfig && frameConfig.source === 'generate' && frameConfig.prompt) {
+      imagePrompt = frameConfig.prompt
+    } else if (slot === 'first') {
+      imagePrompt = shot.manifest.video.prompt
+    } else if (slot === 'middle') {
+      imagePrompt = `Mid-point of: ${shot.manifest.video.prompt.slice(0, 500)}`
+    } else {
+      imagePrompt = `Final moment of: ${shot.manifest.video.prompt.slice(0, 500)}`
+    }
 
     if (!imagePrompt) {
       setShots(prev => prev.map(s =>
@@ -477,14 +485,15 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
 
       if (result.status === 'complete' && result.image_path) {
         const projectPath = getProjectPath()
-        const iterationNum = shot.frameIterations.length + 1
+        const slotIterations = shot.frameSlots?.[slot]?.iterations || (slot === 'first' ? shot.frameIterations : [])
+        const iterationNum = slotIterations.length + 1
 
         let savedPath = result.image_path
         let savedUrl = result.image_path.replace(/\\/g, '/')
         savedUrl = savedUrl.startsWith('/') ? `file://${savedUrl}` : `file:///${savedUrl}`
 
         if (projectPath) {
-          const saved = await saveFrame(shotId, result.image_path, projectPath, 'first', iterationNum)
+          const saved = await saveFrame(shotId, result.image_path, projectPath, slot, iterationNum)
           savedPath = saved.path
           savedUrl = saved.url
         }
@@ -498,12 +507,31 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
 
         setShots(prev => prev.map(s => {
           if (s.manifest.id !== shotId) return s
-          const newFrameIterations = [...s.frameIterations, iteration]
+
+          // Update the specific slot
+          const currentSlots = s.frameSlots || {
+            first: { iterations: [...s.frameIterations], activeIndex: s.activeFrameIndex },
+            middle: { iterations: [], activeIndex: -1 },
+            last: { iterations: [], activeIndex: -1 },
+          }
+          const slotData = currentSlots[slot]
+          const newIterations = [...slotData.iterations, iteration]
+
+          const updatedSlots = {
+            ...currentSlots,
+            [slot]: { iterations: newIterations, activeIndex: newIterations.length - 1 },
+          }
+
+          // Also update legacy fields for backward compat (first slot)
+          const legacyFrameIterations = slot === 'first' ? newIterations : s.frameIterations
+          const legacyActiveFrameIndex = slot === 'first' ? newIterations.length - 1 : s.activeFrameIndex
+
           return {
             ...s,
             status: 'frame-ready',
-            frameIterations: newFrameIterations,
-            activeFrameIndex: newFrameIterations.length - 1,
+            frameIterations: legacyFrameIterations,
+            activeFrameIndex: legacyActiveFrameIndex,
+            frameSlots: updatedSlots,
             error: undefined,
           }
         }))
@@ -694,7 +722,22 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     const currentManifest = manifestRef.current
     if (!shot || !currentManifest) return
 
-    const activeFrame = shot.frameIterations[shot.activeFrameIndex]
+    // Resolve frames for each slot: first, middle, last
+    const getSlotPath = (s: FactoryShot, slotName: 'first' | 'middle' | 'last'): string | null => {
+      const slotData = s.frameSlots?.[slotName]
+      if (slotData && slotData.iterations.length > 0 && slotData.activeIndex >= 0) {
+        return slotData.iterations[slotData.activeIndex].path
+      }
+      // Backward compat: legacy frameIterations = first slot
+      if (slotName === 'first' && s.frameIterations.length > 0 && s.activeFrameIndex >= 0) {
+        return s.frameIterations[s.activeFrameIndex].path
+      }
+      return null
+    }
+
+    const firstFramePath = getSlotPath(shot, 'first')
+    const middleFramePath = getSlotPath(shot, 'middle')
+    const lastFramePath = getSlotPath(shot, 'last')
 
     const duration = parseDuration(shot.manifest.video.duration)
     const genSettings: GenerationSettings = {
@@ -721,7 +764,10 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       type: 'video',
       prompt: shot.manifest.video.prompt,
       settings: genSettings,
-      imagePath: activeFrame?.path ?? null,
+      // Pass first frame as main image, middle/last as additional conditioning
+      imagePath: firstFramePath,
+      middleImagePath: middleFramePath,
+      lastImagePath: lastFramePath,
       projectName: currentManifest.project.name,
     })
 

@@ -417,7 +417,7 @@ export function ShotFactory() {
               shot={selectedShot}
               gpuWarnings={gpuWarnings.filter(w => w.shotId === selectedShot.manifest.id)}
               vramGb={gpuInfo?.vramGb || 0}
-              onGenerateFrame={() => generateFrame(selectedShot.manifest.id)}
+              onGenerateFrame={(slot) => generateFrame(selectedShot.manifest.id, slot)}
               onRenderVideo={() => renderVideo(selectedShot.manifest.id)}
               onApprove={(idx) => approveIteration(selectedShot.manifest.id, idx)}
               onToggleEnabled={() => toggleShotEnabled(selectedShot.manifest.id)}

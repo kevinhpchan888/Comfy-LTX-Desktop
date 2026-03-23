@@ -18,15 +18,15 @@ import {
   Send,
   ImagePlus,
 } from 'lucide-react'
-import type { FactoryShot, ManifestShot, ValidationWarning } from '../../types/factory'
-import { parseDuration } from '../../lib/factory-manifest'
+import type { FactoryShot, ManifestShot, ValidationWarning, FrameSlot } from '../../types/factory'
+import { parseDuration, getSlotFrame } from '../../lib/factory-manifest'
 import { ImageSearchPanel } from './ImageSearchPanel'
 
 interface ShotDetailProps {
   shot: FactoryShot
   gpuWarnings: ValidationWarning[]
   vramGb: number
-  onGenerateFrame: () => void
+  onGenerateFrame: (slot?: FrameSlot) => void
   onRenderVideo: () => void
   onApprove: (index: number) => void
   onToggleEnabled: () => void
@@ -94,7 +94,6 @@ export function ShotDetail({
   onToggleAutoRender,
 }: ShotDetailProps) {
   const m = shot.manifest
-  const activeFrame = shot.frameIterations[shot.activeFrameIndex]
   const duration = parseDuration(m.video.duration)
   const promptWords = m.video.prompt.trim().split(/\s+/).length
 
@@ -102,6 +101,7 @@ export function ShotDetail({
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [showImageSources, setShowImageSources] = useState(false)
+  const [activeSlot, setActiveSlot] = useState<FrameSlot>('first')
 
   // VRAM estimate
   const estimatedVram = vramGb > 0 ? Math.round(vramGb * 0.8) : 0
@@ -193,7 +193,7 @@ export function ShotDetail({
           <p className="text-xs font-medium text-red-400 mb-1">Generation Error</p>
           <p className="text-[11px] text-red-300/80 whitespace-pre-wrap break-words">{shot.error}</p>
           <button
-            onClick={onGenerateFrame}
+            onClick={() => onGenerateFrame()}
             className="mt-2 rounded bg-red-600 px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-red-500"
           >
             Retry
@@ -203,96 +203,124 @@ export function ShotDetail({
 
       {/* Frame Previews */}
       <Section title="Frame Previews" icon={<Image className="h-3.5 w-3.5" />} defaultOpen>
-        {activeFrame ? (
-          <div className="flex flex-col gap-2">
-            <div
-              className="overflow-hidden rounded-lg border border-zinc-800 cursor-zoom-in"
-              onDoubleClick={onImageDoubleClick}
-              title="Double-click to view full size"
-            >
-              <img src={activeFrame.url} alt="Frame preview" className="w-full" />
-            </div>
-            {/* Frame history — show when there are multiple iterations */}
-            {shot.frameIterations.length > 1 && (
-              <div>
-                <span className="text-[10px] text-zinc-500 mb-1 block">
-                  History ({shot.frameIterations.length} versions)
-                </span>
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  {shot.frameIterations.map((iter, idx) => (
-                    <button
-                      key={iter.id}
-                      onClick={() => onSetActiveFrame(idx)}
-                      className={`shrink-0 overflow-hidden rounded border transition-all ${
-                        idx === shot.activeFrameIndex
-                          ? 'border-violet-500 ring-1 ring-violet-500'
-                          : 'border-zinc-700 hover:border-zinc-500'
-                      }`}
-                      title={`Version ${idx + 1}${idx === shot.activeFrameIndex ? ' (active)' : ''} — click to use`}
-                    >
-                      <img
-                        src={iter.url}
-                        alt={`Frame v${idx + 1}`}
-                        className="h-12 w-20 object-cover"
-                      />
-                      <span className={`block text-center text-[9px] py-0.5 ${
-                        idx === shot.activeFrameIndex ? 'text-violet-300 bg-violet-500/10' : 'text-zinc-500'
-                      }`}>
-                        v{idx + 1}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-zinc-500">
-                {activeFrame.seed !== undefined ? `Seed: ${activeFrame.seed}` : `v${shot.activeFrameIndex + 1} of ${shot.frameIterations.length}`}
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setShowImageSources(!showImageSources)}
-                  className={`flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors ${
-                    showImageSources ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                  }`}
-                  title="Upload or search for image"
-                >
-                  <ImagePlus className="h-3 w-3" />
-                  Replace
-                </button>
-                <button
-                  onClick={onGenerateFrame}
-                  className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-zinc-700"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  Regenerate
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-900 p-6">
-            <Image className="h-8 w-8 text-zinc-600" />
-            <p className="text-xs text-zinc-500">No frame generated yet</p>
-            <div className="flex gap-2">
+        {/* Slot tabs: First / Middle / Last */}
+        <div className="flex gap-1 mb-2">
+          {(['first', 'middle', 'last'] as FrameSlot[]).map(slot => {
+            const slotFrame = getSlotFrame(shot, slot)
+            return (
               <button
-                onClick={onGenerateFrame}
-                className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
-              >
-                Generate Image
-              </button>
-              <button
-                onClick={() => setShowImageSources(!showImageSources)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  showImageSources ? 'bg-violet-600 text-white' : 'border border-zinc-600 text-zinc-300 hover:bg-zinc-800'
+                key={slot}
+                onClick={() => setActiveSlot(slot)}
+                className={`flex-1 flex items-center justify-center gap-1 rounded py-1.5 text-[10px] font-medium transition-colors ${
+                  activeSlot === slot
+                    ? 'bg-zinc-800 text-white border border-zinc-600'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
                 }`}
               >
-                <ImagePlus className="h-3.5 w-3.5" />
-                Upload / Search
+                {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                {slotFrame && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
               </button>
+            )
+          })}
+        </div>
+
+        {/* Active slot preview */}
+        {(() => {
+          const slotFrame = getSlotFrame(shot, activeSlot)
+          const slotData = shot.frameSlots?.[activeSlot]
+          // For backward compat, use legacy data for 'first' slot
+          const iterations = activeSlot === 'first'
+            ? (slotData?.iterations.length ? slotData.iterations : shot.frameIterations)
+            : (slotData?.iterations || [])
+          const activeIdx = activeSlot === 'first'
+            ? (slotData?.iterations.length ? slotData.activeIndex : shot.activeFrameIndex)
+            : (slotData?.activeIndex ?? -1)
+
+          return slotFrame ? (
+            <div className="flex flex-col gap-2">
+              <div
+                className="overflow-hidden rounded-lg border border-zinc-800 cursor-zoom-in"
+                onDoubleClick={onImageDoubleClick}
+                title="Double-click to view full size"
+              >
+                <img src={slotFrame.url} alt={`${activeSlot} frame preview`} className="w-full" />
+              </div>
+              {/* Frame history for this slot */}
+              {iterations.length > 1 && (
+                <div>
+                  <span className="text-[10px] text-zinc-500 mb-1 block">
+                    History ({iterations.length} versions)
+                  </span>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {iterations.map((iter, idx) => (
+                      <button
+                        key={iter.id}
+                        onClick={() => onSetActiveFrame(idx)}
+                        className={`shrink-0 overflow-hidden rounded border transition-all ${
+                          idx === activeIdx
+                            ? 'border-violet-500 ring-1 ring-violet-500'
+                            : 'border-zinc-700 hover:border-zinc-500'
+                        }`}
+                        title={`Version ${idx + 1}${idx === activeIdx ? ' (active)' : ''}`}
+                      >
+                        <img src={iter.url} alt={`v${idx + 1}`} className="h-12 w-20 object-cover" />
+                        <span className={`block text-center text-[9px] py-0.5 ${
+                          idx === activeIdx ? 'text-violet-300 bg-violet-500/10' : 'text-zinc-500'
+                        }`}>v{idx + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-zinc-500">
+                  {slotFrame.seed !== undefined ? `Seed: ${slotFrame.seed}` : `${activeSlot} frame`}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setShowImageSources(!showImageSources)}
+                    className={`flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors ${
+                      showImageSources ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                    title="Upload or search for image"
+                  >
+                    <ImagePlus className="h-3 w-3" />
+                    Replace
+                  </button>
+                  <button
+                    onClick={() => onGenerateFrame(activeSlot)}
+                    className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-zinc-700"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Regenerate
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-900 p-4">
+              <Image className="h-6 w-6 text-zinc-600" />
+              <p className="text-[10px] text-zinc-500">No {activeSlot} frame yet</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onGenerateFrame(activeSlot)}
+                  className="rounded bg-violet-600 px-3 py-1.5 text-[10px] font-medium text-white transition-colors hover:bg-violet-500"
+                >
+                  Generate
+                </button>
+                <button
+                  onClick={() => setShowImageSources(!showImageSources)}
+                  className={`flex items-center gap-1 rounded px-3 py-1.5 text-[10px] font-medium transition-colors ${
+                    showImageSources ? 'bg-violet-600 text-white' : 'border border-zinc-600 text-zinc-300 hover:bg-zinc-800'
+                  }`}
+                >
+                  <ImagePlus className="h-3 w-3" />
+                  Upload
+                </button>
+              </div>
+            </div>
+          )
+        })()}
         {/* Image source panel: upload, Pexels, Google */}
         {showImageSources && (
           <ImageSearchPanel
@@ -521,7 +549,7 @@ export function ShotDetail({
       <div className="mt-auto border-t border-zinc-800 p-4 space-y-2">
         <div className="flex gap-2">
           <button
-            onClick={onGenerateFrame}
+            onClick={() => onGenerateFrame()}
             disabled={shot.status === 'disabled'}
             className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >

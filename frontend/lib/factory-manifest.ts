@@ -1,4 +1,4 @@
-import type { FactoryManifest, FactoryShot, ManifestShot } from '../types/factory'
+import type { FactoryManifest, FactoryShot, ManifestShot, FrameSlot, ShotIteration } from '../types/factory'
 
 /** Parse and validate a JSON manifest string. Returns the manifest and any validation errors. */
 export function parseManifest(json: string): { manifest: FactoryManifest | null; errors: string[] } {
@@ -134,6 +134,8 @@ export function parseManifest(json: string): { manifest: FactoryManifest | null;
 }
 
 /** Convert manifest shots to runtime FactoryShot objects, sorted by order. */
+const EMPTY_SLOT = { iterations: [] as ShotIteration[], activeIndex: -1 }
+
 export function manifestToShots(manifest: FactoryManifest): FactoryShot[] {
   const sorted = [...manifest.shots].sort((a, b) => a.order - b.order)
   return sorted.map(shot => ({
@@ -141,9 +143,27 @@ export function manifestToShots(manifest: FactoryManifest): FactoryShot[] {
     status: shot.enabled === false ? 'disabled' : 'idle',
     frameIterations: [],
     activeFrameIndex: -1,
+    frameSlots: {
+      first: { ...EMPTY_SLOT, iterations: [] },
+      middle: { ...EMPTY_SLOT, iterations: [] },
+      last: { ...EMPTY_SLOT, iterations: [] },
+    },
     videoIterations: [],
     activeVideoIndex: -1,
   }))
+}
+
+/** Get the active frame iteration for a given slot. Falls back to legacy frameIterations for 'first'. */
+export function getSlotFrame(shot: FactoryShot, slot: FrameSlot): ShotIteration | undefined {
+  const slotData = shot.frameSlots?.[slot]
+  if (slotData && slotData.iterations.length > 0 && slotData.activeIndex >= 0) {
+    return slotData.iterations[slotData.activeIndex]
+  }
+  // Backward compat: legacy frameIterations = first slot
+  if (slot === 'first' && shot.frameIterations.length > 0 && shot.activeFrameIndex >= 0) {
+    return shot.frameIterations[shot.activeFrameIndex]
+  }
+  return undefined
 }
 
 /** Group shots by scene for display in the storyboard. */
