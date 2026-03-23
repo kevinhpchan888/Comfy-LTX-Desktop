@@ -148,6 +148,11 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   // Manifest & shots
   const [manifest, setManifest] = useState<FactoryManifest | null>(restored?.manifest ?? null)
   const [shots, setShots] = useState<FactoryShot[]>(restored?.shots ?? [])
+  // Refs for async loops to avoid stale closure reads
+  const shotsRef = useRef(shots)
+  shotsRef.current = shots
+  const manifestRef = useRef(manifest)
+  manifestRef.current = manifest
   const [selectedShotId, setSelectedShotId] = useState<string | null>(restored?.selectedShotId ?? null)
   const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set())
 
@@ -380,8 +385,8 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   // ─── Frame Generation ────────────────────────────────────────────────────
 
   const generateFrame = useCallback(async (shotId: string) => {
-    const shot = shots.find(s => s.manifest.id === shotId)
-    if (!shot || !manifest) return
+    const shot = shotsRef.current.find(s => s.manifest.id === shotId)
+    if (!shot || !manifestRef.current) return
 
     setShots(prev => prev.map(s =>
       s.manifest.id === shotId ? { ...s, status: 'generating-frame', error: undefined } : s
@@ -410,7 +415,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
         aspectRatio: shot.manifest.video.aspect_ratio || '16:9',
         duration: 0,
         fps: 24,
-        projectName: manifest.project.name,
+        projectName: manifestRef.current.project.name,
       })
 
       if (result.status === 'complete' && result.image_path) {
@@ -457,11 +462,12 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
           : s
       ))
     }
-  }, [shots, manifest, getProjectPath])
+  }, [getProjectPath])
 
   const generateAllFrames = useCallback(async () => {
     cancelledRef.current = false
-    const enabledShots = shots.filter(s => s.status !== 'disabled' && s.manifest.enabled)
+    const currentShots = shotsRef.current
+    const enabledShots = currentShots.filter(s => s.status !== 'disabled' && s.manifest.enabled)
     // Include all shots that haven't generated a frame yet (idle or error)
     const shotsNeedingFrames = enabledShots.filter(s =>
       s.frameIterations.length === 0 && (s.status === 'idle' || s.status === 'error')
@@ -483,13 +489,14 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
 
     setProgress(prev => ({ ...prev, completed: shotsNeedingFrames.length, currentShotId: null }))
     setPhase(cancelledRef.current ? 'idle' : 'reviewing')
-  }, [shots, generateFrame])
+  }, [generateFrame])
 
   // ─── Video Rendering ─────────────────────────────────────────────────────
 
   const renderVideo = useCallback(async (shotId: string) => {
-    const shot = shots.find(s => s.manifest.id === shotId)
-    if (!shot || !manifest) return
+    const shot = shotsRef.current.find(s => s.manifest.id === shotId)
+    const currentManifest = manifestRef.current
+    if (!shot || !currentManifest) return
 
     const activeFrame = shot.frameIterations[shot.activeFrameIndex]
 
@@ -519,7 +526,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       prompt: shot.manifest.video.prompt,
       settings: genSettings,
       imagePath: activeFrame?.path ?? null,
-      projectName: manifest.project.name,
+      projectName: currentManifest.project.name,
     })
 
     setShots(prev => prev.map(s =>
@@ -539,7 +546,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
         resolve()
       }, 100)
     })
-  }, [shots, manifest, queue, addToQueue, settings])
+  }, [addToQueue, settings])
 
   // Effect to capture newly added queue item IDs for factory shots
   useEffect(() => {
@@ -647,7 +654,8 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
 
   const renderAllVideos = useCallback(async () => {
     cancelledRef.current = false
-    const enabledShots = shots.filter(s =>
+    const currentShots = shotsRef.current
+    const enabledShots = currentShots.filter(s =>
       s.status === 'frame-ready' && s.manifest.enabled
     )
 
@@ -672,7 +680,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
 
     setProgress(prev => ({ ...prev, completed: enabledShots.length, currentShotId: null }))
     setPhase(cancelledRef.current ? 'reviewing' : 'complete')
-  }, [shots, renderVideo, settings.factoryDelayBetweenShots])
+  }, [renderVideo, settings.factoryDelayBetweenShots])
 
   // Auto-render: when a shot transitions to frame-ready, auto-trigger video render
   const prevShotStatusesRef = useRef<Map<string, string>>(new Map())
@@ -720,10 +728,10 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     }
 
     setPhase('organizing')
-    const result = await organizeOutputs(shots, projectPath)
+    const result = await organizeOutputs(shotsRef.current, projectPath)
     setPhase('complete')
     return result
-  }, [shots, getProjectPath])
+  }, [getProjectPath])
 
   // ─── Send to Editor ─────────────────────────────────────────────────────
 
@@ -734,7 +742,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     if (!currentProjectId || !currentProject) return null
 
     // Include shots that have either rendered videos OR generated frames
-    const shotsToSend = shots.filter(s =>
+    const shotsToSend = shotsRef.current.filter(s =>
       shotIds.includes(s.manifest.id) && (s.videoIterations.length > 0 || s.frameIterations.length > 0)
     )
     if (shotsToSend.length === 0) {
@@ -824,7 +832,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     setCurrentTab('video-editor')
 
     return { clips: allClips, tracks: timeline.tracks }
-  }, [shots, currentProjectId, currentProject, addAsset, getActiveTimeline, updateTimeline, setCurrentTab])
+  }, [currentProjectId, currentProject, addAsset, getActiveTimeline, updateTimeline, setCurrentTab])
 
   const sendToEditor = useCallback(async (shotIds: string[]) => {
     await sendShotsToTimeline(shotIds)
@@ -835,7 +843,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     if (!result) return
 
     // Determine export dimensions from the first shot's resolution
-    const firstShot = shots.find(s => shotIds.includes(s.manifest.id) && s.videoIterations.length > 0)
+    const firstShot = shotsRef.current.find(s => shotIds.includes(s.manifest.id) && s.videoIterations.length > 0)
     const resStr = firstShot?.manifest.video.resolution || '720p'
     const resDims: Record<string, [number, number]> = {
       '4K': [3840, 2160], '2160p': [3840, 2160],
@@ -886,7 +894,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       fps,
       quality: 20,
     })
-  }, [sendShotsToTimeline, shots, currentProject])
+  }, [sendShotsToTimeline, currentProject])
 
   // ─── GPU ─────────────────────────────────────────────────────────────────
 
