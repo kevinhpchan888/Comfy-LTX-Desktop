@@ -1,5 +1,6 @@
-import { ArrowLeft, Sparkles, Film, Zap } from 'lucide-react'
+import { ArrowLeft, Sparkles, Film, Zap, Clock } from 'lucide-react'
 import { useProjects } from '../contexts/ProjectContext'
+import { useFactory } from '../contexts/FactoryContext'
 import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
 import { GenSpace } from './GenSpace'
@@ -9,6 +10,7 @@ import type { ProjectTab } from '../types/project'
 
 export function Project() {
   const { currentProject, currentTab, setCurrentTab, goHome } = useProjects()
+  const { stats, manifest } = useFactory()
   
   if (!currentProject) {
     return (
@@ -44,6 +46,31 @@ export function Project() {
           
           {/* Project name */}
           <span className="text-white font-medium">{currentProject.name}</span>
+
+          {/* Factory stats — shown when a manifest is loaded */}
+          {manifest && (
+            <div className="flex items-center gap-3 ml-4 pl-4 border-l border-zinc-700">
+              <div className="flex items-center gap-1.5 text-zinc-400">
+                <Clock className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium">
+                  {formatDuration(stats.totalDuration)}
+                </span>
+              </div>
+              <span className="text-[10px] text-zinc-500">
+                {stats.total} shots
+              </span>
+              {stats.approved > 0 && (
+                <span className="text-[10px] text-green-400">
+                  {stats.approved} approved
+                </span>
+              )}
+              {stats.errors > 0 && (
+                <span className="text-[10px] text-red-400">
+                  {stats.errors} error{stats.errors !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Center - Tabs */}
@@ -82,4 +109,11 @@ export function Project() {
       </main>
     </div>
   )
+}
+
+function formatDuration(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60)
+  const secs = totalSeconds % 60
+  if (mins === 0) return `${secs}s`
+  return `${mins}m ${secs}s`
 }
