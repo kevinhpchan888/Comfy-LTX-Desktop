@@ -241,6 +241,12 @@ export function StoryboardGrid({
                       <p className="line-clamp-2 text-xs text-zinc-300">
                         {shot.manifest.description}
                       </p>
+                      {/* Error message */}
+                      {shot.status === 'error' && shot.error && (
+                        <p className="line-clamp-2 text-[10px] text-red-400" title={shot.error}>
+                          {shot.error}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )

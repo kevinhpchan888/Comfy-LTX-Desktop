@@ -134,7 +134,9 @@ export function ShotDetail({
         <div className="flex items-center justify-between">
           <h2 className="font-mono text-sm font-bold text-zinc-100">{m.id}</h2>
           <div className="flex items-center gap-2">
-            <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
+            <span className={`rounded px-2 py-0.5 text-[10px] ${
+              shot.status === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-zinc-800 text-zinc-400'
+            }`}>
               {shot.status.replace('-', ' ')}
             </span>
             <button
@@ -167,6 +169,20 @@ export function ShotDetail({
           </p>
         )}
       </div>
+
+      {/* Error banner */}
+      {shot.status === 'error' && shot.error && (
+        <div className="border-b border-red-500/30 bg-red-500/10 px-4 py-3">
+          <p className="text-xs font-medium text-red-400 mb-1">Generation Error</p>
+          <p className="text-[11px] text-red-300/80 whitespace-pre-wrap break-words">{shot.error}</p>
+          <button
+            onClick={onGenerateFrame}
+            className="mt-2 rounded bg-red-600 px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-red-500"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Frame Previews */}
       <Section title="Frame Previews" icon={<Image className="h-3.5 w-3.5" />} defaultOpen>
