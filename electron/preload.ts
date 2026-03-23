@@ -180,6 +180,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => { ipcRenderer.removeListener('updates:progress', callback) }
   },
 
+  // Custom node update notifications
+  onNodesUpdated: (callback: (_event: unknown, data: { message: string }) => void) => {
+    ipcRenderer.on('comfyui:nodes-updated', callback)
+    return () => { ipcRenderer.removeListener('comfyui:nodes-updated', callback) }
+  },
+
   // Platform info
   platform: process.platform,
 })
@@ -287,6 +293,7 @@ declare global {
       updateNodes: () => Promise<{ success: boolean; error?: string }>
       checkAppUpdate: () => Promise<{ updateAvailable: boolean; currentVersion: string; latestVersion?: string }>
       onUpdateProgress: (callback: (_event: unknown, data: { phase: string; message: string; error?: string }) => void) => () => void
+      onNodesUpdated: (callback: (_event: unknown, data: { message: string }) => void) => () => void
       platform: string
     }
   }

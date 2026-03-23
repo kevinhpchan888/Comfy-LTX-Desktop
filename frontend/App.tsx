@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, AlertCircle, Settings, FileText } from 'lucide-react'
+import { Loader2, AlertCircle, Settings, FileText, X, RefreshCw } from 'lucide-react'
 import { ProjectProvider, useProjects } from './contexts/ProjectContext'
 import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
 import { AppSettingsProvider } from './contexts/AppSettingsContext'
@@ -26,6 +26,7 @@ function AppContent() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId | undefined>(undefined)
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false)
   const [hasNodeUpdates, setHasNodeUpdates] = useState(false)
+  const [nodesUpdatedMessage, setNodesUpdatedMessage] = useState<string | null>(null)
   const setupCompletionInFlightRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
@@ -48,6 +49,14 @@ function AppContent() {
         .catch(() => {})
     }, 10_000)
     return () => clearTimeout(timer)
+  }, [])
+
+  // Listen for custom node install/repair notifications
+  useEffect(() => {
+    const cleanup = window.electronAPI.onNodesUpdated((_event, data) => {
+      setNodesUpdatedMessage(data.message)
+    })
+    return cleanup
   }, [])
 
   useEffect(() => {
@@ -159,6 +168,20 @@ function AppContent() {
 
   return (
     <div className="relative h-screen w-screen">
+      {nodesUpdatedMessage && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-600 text-white px-4 py-2 flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 flex-shrink-0" />
+            <span>{nodesUpdatedMessage}</span>
+          </div>
+          <button
+            onClick={() => setNodesUpdatedMessage(null)}
+            className="ml-4 p-1 rounded hover:bg-amber-700 transition-colors flex-shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {renderView()}
 
       {showGlobalControls && (

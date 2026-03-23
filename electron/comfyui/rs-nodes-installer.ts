@@ -306,16 +306,17 @@ export async function installRsNodes(
  * Intended to run on app startup to catch nodes that failed initial install
  * or were removed externally.
  */
-export async function checkAndRepairNodes(comfyPath: string): Promise<void> {
+export async function checkAndRepairNodes(comfyPath: string): Promise<boolean> {
   const customNodesDir = path.join(comfyPath, 'custom_nodes')
-  if (!fs.existsSync(customNodesDir)) return
+  if (!fs.existsSync(customNodesDir)) return false
 
   const git = await ensureGit()
   if (!git) {
     logger.error('[startup] Git not available — cannot check/repair custom nodes')
-    return
+    return false
   }
 
+  let repaired = false
   for (const repo of CUSTOM_NODE_REPOS) {
     const nodeDir = path.join(customNodesDir, repo.dir)
     const hasDir = fs.existsSync(nodeDir)
@@ -333,6 +334,7 @@ export async function checkAndRepairNodes(comfyPath: string): Promise<void> {
             await execPromise(python, ['-m', 'pip', 'install', '-r', reqFile], { cwd: nodeDir })
           }
         }
+        repaired = true
         logger.info(`[startup] ${repo.name} installed successfully`)
       } catch (err) {
         logger.error(`[startup] Failed to install ${repo.name}: ${err}`)
@@ -360,10 +362,12 @@ export async function checkAndRepairNodes(comfyPath: string): Promise<void> {
             await execPromise(python, ['-m', 'pip', 'install', '-r', reqFile], { cwd: nodeDir })
           }
         }
+        repaired = true
         logger.info(`[startup] ${repo.name} git initialized and synced`)
       } catch (err) {
         logger.error(`[startup] Failed to init ${repo.name}: ${err}`)
       }
     }
   }
+  return repaired
 }

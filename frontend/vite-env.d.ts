@@ -122,6 +122,7 @@ interface Window {
     updateNodes: () => Promise<{ success: boolean; error?: string }>
     checkAppUpdate: () => Promise<{ updateAvailable: boolean; currentVersion: string; latestVersion?: string }>
     onUpdateProgress: (callback: (_event: unknown, data: { phase: string; message: string; error?: string }) => void) => () => void
+    onNodesUpdated: (callback: (_event: unknown, data: { message: string }) => void) => () => void
     platform: string
   }
 }

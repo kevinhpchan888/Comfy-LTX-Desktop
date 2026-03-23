@@ -94,11 +94,27 @@ if (!gotLock) {
 
       if (needsFullUpdate) {
         logger.info(`App updated to ${app.getVersion()} — re-installing custom nodes`)
-        installRsNodes(comfyPath, (p) => logger.info(`[post-update] ${p.message}`)).catch((err) => {
+        installRsNodes(comfyPath, (p) => logger.info(`[post-update] ${p.message}`)).then(() => {
+          const win = getMainWindow()
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('comfyui:nodes-updated', {
+              message: 'Custom nodes were updated. Please restart ComfyUI to load the changes.',
+            })
+          }
+        }).catch((err) => {
           logger.warn(`Post-update node install failed: ${err}`)
         })
       } else {
-        checkAndRepairNodes(comfyPath).catch((err) => {
+        checkAndRepairNodes(comfyPath).then((repaired) => {
+          if (repaired) {
+            const win = getMainWindow()
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('comfyui:nodes-updated', {
+                message: 'Missing custom nodes were repaired. Please restart ComfyUI to load the changes.',
+              })
+            }
+          }
+        }).catch((err) => {
           logger.warn(`Startup node check failed: ${err}`)
         })
       }

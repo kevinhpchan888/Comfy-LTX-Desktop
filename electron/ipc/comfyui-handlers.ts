@@ -414,6 +414,16 @@ export function registerComfyUIHandlers(): void {
       if (message === 'Generation cancelled') {
         return { status: 'cancelled' }
       }
+      // If ComfyUI reports a missing custom node, tell the user to restart ComfyUI
+      if (message.includes('missing_node_type') || message.includes('not found. The custom node may not be installed')) {
+        const nodeMatch = message.match(/Node '([^']+)' not found/)
+        const nodeName = nodeMatch ? nodeMatch[1] : 'a required custom node'
+        logger.error(`ComfyUI generation failed: ${message}`)
+        return {
+          status: 'error',
+          error: `${nodeName} is not loaded in ComfyUI. Please restart ComfyUI so it can pick up the newly installed custom nodes, then try again.`,
+        }
+      }
       // If it looks like a connection error, try re-discovering the port
       if (message.includes('ECONNREFUSED') || message.includes('Invalid argument') || message.includes('fetch failed')) {
         logger.info('Generation failed with connection error — re-discovering ComfyUI port...')
