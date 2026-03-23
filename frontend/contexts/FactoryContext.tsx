@@ -96,6 +96,38 @@ const INITIAL_PROGRESS: FactoryProgress = {
   startTime: null,
 }
 
+const FACTORY_STORAGE_KEY = 'ltx-factory-state'
+
+interface FactoryPersisted {
+  manifest: FactoryManifest | null
+  shots: FactoryShot[]
+  selectedShotId: string | null
+}
+
+function saveFactoryState(state: FactoryPersisted): void {
+  try {
+    localStorage.setItem(FACTORY_STORAGE_KEY, JSON.stringify(state))
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+function loadFactoryState(): FactoryPersisted | null {
+  try {
+    const raw = localStorage.getItem(FACTORY_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as FactoryPersisted
+    if (!parsed.manifest || !Array.isArray(parsed.shots)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function clearFactoryStorage(): void {
+  localStorage.removeItem(FACTORY_STORAGE_KEY)
+}
+
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function FactoryProvider({ children }: { children: React.ReactNode }) {
@@ -103,11 +135,30 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   const { currentProject, currentProjectId, addAsset, getActiveTimeline, updateTimeline, setCurrentTab } = useProjects()
   const { settings } = useAppSettings()
 
+  // Restore persisted factory state on first load
+  const restoredRef = useRef(false)
+  const restored = !restoredRef.current ? loadFactoryState() : null
+  if (!restoredRef.current) restoredRef.current = true
+
   // Manifest & shots
-  const [manifest, setManifest] = useState<FactoryManifest | null>(null)
-  const [shots, setShots] = useState<FactoryShot[]>([])
-  const [selectedShotId, setSelectedShotId] = useState<string | null>(null)
+  const [manifest, setManifest] = useState<FactoryManifest | null>(restored?.manifest ?? null)
+  const [shots, setShots] = useState<FactoryShot[]>(restored?.shots ?? [])
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(restored?.selectedShotId ?? null)
   const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set())
+
+  // Auto-save factory state (debounced)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      if (manifest) {
+        saveFactoryState({ manifest, shots, selectedShotId })
+      } else {
+        clearFactoryStorage()
+      }
+    }, 1000)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [manifest, shots, selectedShotId])
 
   // Pipeline state
   const [phase, setPhase] = useState<FactoryPhase>('idle')
@@ -125,6 +176,17 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   // Track queue items mapped to shots
   const shotQueueMapRef = useRef<Map<string, string>>(new Map())
   const prevQueueRef = useRef<QueueItem[]>([])
+
+  // Detect GPU on restored factory state
+  useEffect(() => {
+    if (restored?.manifest && restored.shots.length > 0) {
+      void detectGpuCapabilities().then(info => {
+        setGpuInfo(info)
+        setGpuWarnings(validateAllShotsGpu(restored.shots, info.vramGb))
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -168,6 +230,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     setProgress(INITIAL_PROGRESS)
     setChatMessages([])
     setGpuWarnings([])
+    clearFactoryStorage()
     cancelledRef.current = false
     shotQueueMapRef.current.clear()
   }, [])
