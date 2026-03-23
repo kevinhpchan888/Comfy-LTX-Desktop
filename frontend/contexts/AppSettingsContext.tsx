@@ -106,7 +106,12 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const refreshSettings = useCallback(async () => {
     try {
       const data = await window.electronAPI.getSettings()
-      setSettings({ ...DEFAULT_APP_SETTINGS, ...data })
+      const merged = { ...DEFAULT_APP_SETTINGS, ...data }
+      // Auto-migrate: if provider is 'anthropic' but no API key, switch to claude-max
+      if (merged.factoryAiProvider === 'anthropic' && !merged.factoryAnthropicApiKey) {
+        merged.factoryAiProvider = 'claude-max'
+      }
+      setSettings(merged)
       setIsLoaded(true)
     } catch {
       // Use defaults on error

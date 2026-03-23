@@ -332,7 +332,6 @@ export function ShotFactory() {
             onSend={sendChatMessage}
             onApplyPreview={applyShotPreview}
             isStreaming={isChatStreaming}
-            isOpen={showConsole}
             onClose={() => setShowConsole(false)}
           />
         ) : selectedShot ? (

@@ -833,6 +833,9 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       if (llmSettings.aiProvider === 'anthropic' && !llmSettings.anthropicApiKey) {
         throw new Error('Anthropic API key not configured. Open Settings → AI Provider to add your key.')
       }
+      if (llmSettings.aiProvider === 'claude-max' && !llmSettings.proxyUrl) {
+        throw new Error('Claude Max proxy URL not configured. Open Settings → AI Provider to set your proxy URL.')
+      }
       if (llmSettings.aiProvider === 'local' && !llmSettings.proxyUrl) {
         throw new Error('Proxy URL not configured. Open Settings → AI Provider to set your local proxy.')
       }

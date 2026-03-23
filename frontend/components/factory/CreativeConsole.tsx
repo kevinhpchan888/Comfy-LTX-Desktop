@@ -7,7 +7,6 @@ interface CreativeConsoleProps {
   onSend: (content: string) => void
   onApplyPreview: (messageId: string, previewIndex: number) => void
   isStreaming: boolean
-  isOpen: boolean
   onClose: () => void
 }
 
@@ -16,7 +15,6 @@ export function CreativeConsole({
   onSend,
   onApplyPreview,
   isStreaming,
-  isOpen,
   onClose,
 }: CreativeConsoleProps) {
   const [input, setInput] = useState('')
@@ -42,11 +40,7 @@ export function CreativeConsole({
   }
 
   return (
-    <div
-      className={`fixed right-0 top-0 z-40 flex h-full w-96 flex-col border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}
-    >
+    <div className="w-96 flex-shrink-0 flex flex-col border-l border-zinc-800 bg-zinc-950">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-2">
