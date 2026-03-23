@@ -66,6 +66,8 @@ export interface GenerationContextType extends GenerationState {
   cancelQueue: () => void
   isProcessingQueue: boolean
   queuePosition: number // 0-based index of currently processing item, -1 if not processing
+  autoContinue: boolean
+  setAutoContinue: (enabled: boolean) => void
   /** Returns completed video/image paths from the queue in order */
   getCompletedResults: () => Array<{ path: string; url: string; type: 'video' | 'image'; prompt: string }>
 }
@@ -106,6 +108,12 @@ export function GenerationProvider({ children }: { children: React.ReactNode }) 
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const [queuePosition, setQueuePosition] = useState(-1)
+  const [autoContinue, setAutoContinueState] = useState(false)
+  const autoContinueRef = useRef(false)
+  const setAutoContinue = useCallback((enabled: boolean) => {
+    setAutoContinueState(enabled)
+    autoContinueRef.current = enabled
+  }, [])
   const cancelledRef = useRef(false)
   const queueCancelledRef = useRef(false)
   const processingQueueRef = useRef(false)
@@ -665,6 +673,33 @@ export function GenerationProvider({ children }: { children: React.ReactNode }) 
 
         await processQueueItem(item)
 
+        // Auto-continuation: extract last frame from completed video and set as first frame for next item
+        if (autoContinueRef.current && !queueCancelledRef.current && item.params.type === 'video') {
+          const updatedQueue = await new Promise<QueueItem[]>(resolve => {
+            setQueue(prev => { resolve(prev); return prev })
+          })
+          const completedItem = updatedQueue.find(q => q.id === item.id)
+          if (completedItem?.status === 'complete' && completedItem.videoUrl) {
+            try {
+              // Extract last frame (seek to near the end of the video)
+              const seekTime = Math.max(0, (item.params.settings.duration || 5) - 0.1)
+              const { path: framePath } = await window.electronAPI.extractVideoFrame(completedItem.videoUrl, seekTime, 1920, 95)
+
+              // Patch the next pending item's imagePath with the last frame
+              const nextPendingId = pendingIds[i + 1]
+              if (nextPendingId) {
+                setQueue(prev => prev.map(q =>
+                  q.id === nextPendingId && q.status === 'pending' && q.params.type === 'video'
+                    ? { ...q, params: { ...q.params, imagePath: framePath } }
+                    : q
+                ))
+              }
+            } catch {
+              // If frame extraction fails, continue without chaining
+            }
+          }
+        }
+
         // Brief pause between items
         if (!queueCancelledRef.current) {
           await new Promise(r => setTimeout(r, 200))
@@ -698,6 +733,8 @@ export function GenerationProvider({ children }: { children: React.ReactNode }) 
       cancelQueue,
       isProcessingQueue,
       queuePosition,
+      autoContinue,
+      setAutoContinue,
       getCompletedResults,
     }}>
       {children}

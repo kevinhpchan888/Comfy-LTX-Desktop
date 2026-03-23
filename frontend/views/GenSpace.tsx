@@ -5,7 +5,7 @@ import {
   Clock, Monitor, ChevronUp, Scissors, RefreshCw,
   ChevronLeft, ChevronRight, Copy, Check,
   Menu, Square, ArrowUpDown, ListPlus, XCircle,
-  CheckCircle2, AlertCircle, Loader2
+  CheckCircle2, AlertCircle, Loader2, Link2
 } from 'lucide-react'
 import { useProjects } from '../contexts/ProjectContext'
 import type { GenSpaceRetakeSource } from '../contexts/ProjectContext'
@@ -294,7 +294,10 @@ function BatchQueuePanel({
   onClear,
   onCancel,
   onSendToEditor,
+  onBulkImport,
   isProcessing,
+  autoContinue,
+  onAutoContinueChange,
 }: {
   queue: QueueItem[]
   onRemove: (id: string) => void
@@ -302,9 +305,20 @@ function BatchQueuePanel({
   onClear: () => void
   onCancel: () => void
   onSendToEditor: () => void
+  onBulkImport: (prompts: string[]) => void
+  autoContinue: boolean
+  onAutoContinueChange: (enabled: boolean) => void
   isProcessing: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
+  const [showBulkImport, setShowBulkImport] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [templates, setTemplates] = useState<Array<{ name: string; pattern: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem('ltx-prompt-templates') || '[]') } catch { return [] }
+  })
+  const [newTemplateName, setNewTemplateName] = useState('')
+  const [newTemplatePattern, setNewTemplatePattern] = useState('')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const activeCount = queue.filter(q => q.status === 'pending' || q.status === 'generating').length
@@ -321,6 +335,39 @@ function BatchQueuePanel({
       case 'error': return <AlertCircle className="h-3.5 w-3.5 text-red-400" />
       case 'cancelled': return <XCircle className="h-3.5 w-3.5 text-zinc-500" />
     }
+  }
+
+  const saveTemplates = (updated: Array<{ name: string; pattern: string }>) => {
+    setTemplates(updated)
+    localStorage.setItem('ltx-prompt-templates', JSON.stringify(updated))
+  }
+
+  const addTemplate = () => {
+    if (!newTemplateName.trim() || !newTemplatePattern.trim()) return
+    saveTemplates([...templates, { name: newTemplateName.trim(), pattern: newTemplatePattern.trim() }])
+    setNewTemplateName('')
+    setNewTemplatePattern('')
+  }
+
+  const deleteTemplate = (index: number) => {
+    saveTemplates(templates.filter((_, i) => i !== index))
+  }
+
+  const applyTemplate = (pattern: string) => {
+    // Extract {variable} placeholders
+    const vars = Array.from(new Set(pattern.match(/\{[^}]+\}/g) || []))
+    if (vars.length === 0) {
+      // No variables — just set as bulk text with the pattern as a single prompt
+      setBulkText(pattern)
+      setShowBulkImport(true)
+      setShowTemplates(false)
+      return
+    }
+    // Set the pattern in bulk text area with a comment explaining usage
+    const example = vars.map(v => `${v.slice(1, -1)}: value1, value2, value3`).join('\n')
+    setBulkText(`# Template: ${pattern}\n# Fill in values below (one set per line):\n# ${example}\n`)
+    setShowBulkImport(true)
+    setShowTemplates(false)
   }
 
   const canDrag = (item: QueueItem) => item.status === 'pending'
@@ -462,14 +509,132 @@ function BatchQueuePanel({
               ))}
             </div>
 
+            {/* Templates panel */}
+            {showTemplates && (
+              <div className="px-3 py-2 border-t border-zinc-800/60">
+                <p className="text-[11px] text-zinc-400 font-medium mb-2">Prompt Templates</p>
+                {templates.length > 0 && (
+                  <div className="space-y-1 mb-2 max-h-[120px] overflow-y-auto">
+                    {templates.map((t, i) => (
+                      <div key={i} className="flex items-center gap-1.5 group">
+                        <button
+                          onClick={() => applyTemplate(t.pattern)}
+                          className="flex-1 text-left px-2 py-1.5 rounded bg-zinc-800/60 hover:bg-zinc-700/60 transition-colors"
+                          title={t.pattern}
+                        >
+                          <span className="text-[11px] text-zinc-300 font-medium">{t.name}</span>
+                          <p className="text-[10px] text-zinc-500 truncate">{t.pattern}</p>
+                        </button>
+                        <button
+                          onClick={() => deleteTemplate(i)}
+                          className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-1.5">
+                  <input
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    placeholder="Name"
+                    className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-violet-500"
+                  />
+                  <input
+                    value={newTemplatePattern}
+                    onChange={(e) => setNewTemplatePattern(e.target.value)}
+                    placeholder="A {subject} walks through {scene}"
+                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-violet-500"
+                    onKeyDown={(e) => { if (e.key === 'Enter') addTemplate() }}
+                  />
+                  <button
+                    onClick={addTemplate}
+                    disabled={!newTemplateName.trim() || !newTemplatePattern.trim()}
+                    className="px-2 py-1 rounded text-[11px] font-medium bg-violet-600 text-white hover:bg-violet-500 disabled:bg-zinc-700 disabled:text-zinc-500 transition-all"
+                  >
+                    Save
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-600 mt-1.5">
+                  Use {'{subject}'}, {'{scene}'}, etc. as placeholders. Click a template to apply it.
+                </p>
+              </div>
+            )}
+
+            {/* Bulk import panel */}
+            {showBulkImport && (
+              <div className="px-3 py-2 border-t border-zinc-800/60">
+                <p className="text-[11px] text-zinc-500 mb-1.5">Paste prompts — one per line:</p>
+                <textarea
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  placeholder={"A dog running on a beach\nA cat sitting on a windowsill\nA bird flying over mountains"}
+                  className="w-full h-20 bg-zinc-800 border border-zinc-700 rounded-md px-2.5 py-2 text-xs text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-violet-500"
+                />
+                <div className="flex justify-between items-center mt-1.5">
+                  <span className="text-[10px] text-zinc-600">
+                    {bulkText.trim() ? `${bulkText.trim().split('\n').filter(l => l.trim()).length} prompts` : 'Empty'}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setShowBulkImport(false); setBulkText('') }}
+                      className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        const prompts = bulkText.trim().split('\n').map(l => l.trim()).filter(Boolean)
+                        if (prompts.length > 0) {
+                          onBulkImport(prompts)
+                          setBulkText('')
+                          setShowBulkImport(false)
+                        }
+                      }}
+                      disabled={!bulkText.trim()}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-violet-600 text-white hover:bg-violet-500 disabled:bg-zinc-700 disabled:text-zinc-500 transition-all"
+                    >
+                      Add All to Queue
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Footer actions */}
             <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800/60">
-              <button
-                onClick={onClear}
-                className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                Clear All
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={onClear}
+                  className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  Clear All
+                </button>
+                <button
+                  onClick={() => { setShowBulkImport(!showBulkImport); if (!showBulkImport) setShowTemplates(false) }}
+                  className={`text-[11px] transition-colors ${showBulkImport ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title="Import multiple prompts at once"
+                >
+                  Bulk Import
+                </button>
+                <button
+                  onClick={() => { setShowTemplates(!showTemplates); if (!showTemplates) setShowBulkImport(false) }}
+                  className={`text-[11px] transition-colors ${showTemplates ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title="Save and reuse prompt patterns with variable placeholders"
+                >
+                  Templates
+                </button>
+                <button
+                  onClick={() => onAutoContinueChange(!autoContinue)}
+                  className={`flex items-center gap-1 text-[11px] transition-colors ${autoContinue ? 'text-green-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title="Auto-continuation: use last frame of each video as first frame of the next for seamless transitions"
+                >
+                  <Link2 className="h-3 w-3" />
+                  Chain
+                </button>
+              </div>
 
               <div className="flex items-center gap-3">
                 {isProcessing && (
@@ -562,7 +727,10 @@ function PromptBar({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isGenerating && canGenerate) {
+    if (e.key === 'Enter' && e.shiftKey && !isGenerating && canGenerate && mode !== 'retake') {
+      e.preventDefault()
+      onAddToQueue()
+    } else if (e.key === 'Enter' && !e.shiftKey && !isGenerating && canGenerate) {
       e.preventDefault()
       onGenerate()
     }
@@ -741,27 +909,7 @@ function PromptBar({
           </>
         )}
 
-        {/* Add to Queue button — not shown in retake mode */}
-        {!isGenerating && mode !== 'retake' && (
-          <button
-            onClick={onAddToQueue}
-            disabled={!canGenerate}
-            className={`flex items-center gap-1.5 ml-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-shrink-0 ${
-              !canGenerate
-                ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
-                : 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600'
-            }`}
-            title="Add to batch queue"
-          >
-            <ListPlus className="h-3.5 w-3.5" />
-            Queue
-            {queueCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-violet-600 text-white text-[10px] leading-none">{queueCount}</span>
-            )}
-          </button>
-        )}
-
-        {/* Generate / Stop button */}
+        {/* Generate / Stop / Queue buttons */}
         {isGenerating ? (
           <button
             onClick={onCancel}
@@ -771,18 +919,37 @@ function PromptBar({
             Stop
           </button>
         ) : (
-          <button
-            onClick={onGenerate}
-            disabled={!canGenerate}
-            className={`flex items-center gap-1.5 ml-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-shrink-0 ${
-              !canGenerate
-                ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
-                : 'bg-white text-black hover:bg-zinc-200'
-            }`}
-          >
-            {buttonIcon}
-            {buttonLabel}
-          </button>
+          <>
+            {mode !== 'retake' && (
+              <button
+                onClick={onAddToQueue}
+                disabled={!canGenerate}
+                className={`relative ml-1.5 p-1.5 rounded-md transition-all flex-shrink-0 ${
+                  !canGenerate
+                    ? 'text-zinc-600 cursor-not-allowed'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+                }`}
+                title="Add to batch queue (Shift+Enter)"
+              >
+                <ListPlus className="h-4 w-4" />
+                {queueCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 rounded-full bg-violet-600 text-white text-[9px] leading-none font-medium">{queueCount}</span>
+                )}
+              </button>
+            )}
+            <button
+              onClick={onGenerate}
+              disabled={!canGenerate}
+              className={`flex items-center gap-1.5 ml-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-shrink-0 ${
+                !canGenerate
+                  ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                  : 'bg-white text-black hover:bg-zinc-200'
+              }`}
+            >
+              {buttonIcon}
+              {buttonLabel}
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -922,6 +1089,8 @@ export function GenSpace() {
     clearQueue,
     cancelQueue,
     isProcessingQueue,
+    autoContinue,
+    setAutoContinue,
     getCompletedResults,
   } = useGeneration()
 
@@ -1300,6 +1469,42 @@ export function GenSpace() {
     addToQueue(params)
     // Clear prompt for next entry but keep settings/images
     setPrompt('')
+  }
+
+  const handleBulkImport = (prompts: string[]) => {
+    const imagePath = inputImage ? fileUrlToPath(inputImage) : null
+    const middleImagePath = selectedMiddleImage ? fileUrlToPath(selectedMiddleImage) : null
+    const lastImagePath = selectedLastImage ? fileUrlToPath(selectedLastImage) : null
+    const audioPath = selectedAudio ? fileUrlToPath(selectedAudio) : null
+    const effectiveSettings = { ...settings }
+    if (audioPath) effectiveSettings.model = 'pro'
+
+    for (const promptText of prompts) {
+      const params: QueueItemParams = genMode === 'text-to-image'
+        ? {
+            type: 'image',
+            prompt: promptText,
+            settings: effectiveSettings,
+            projectName: currentProject?.name,
+          }
+        : {
+            type: 'video',
+            prompt: promptText,
+            settings: effectiveSettings,
+            imagePath,
+            middleImagePath,
+            lastImagePath,
+            audioPath,
+            strengths: {
+              first: firstStrength,
+              middle: middleStrength,
+              last: lastStrength,
+            },
+            projectName: currentProject?.name,
+            preserveAspectRatio,
+          }
+      addToQueue(params)
+    }
   }
 
   const handleSendToEditor = async () => {
@@ -1686,7 +1891,7 @@ export function GenSpace() {
                   <button
                     onClick={handleAddToQueue}
                     disabled={!canSubmit}
-                    className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    className={`relative flex items-center justify-center p-2.5 rounded-lg transition-all ${
                       !canSubmit
                         ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
                         : 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600'
@@ -1694,9 +1899,8 @@ export function GenSpace() {
                     title="Add to batch queue"
                   >
                     <ListPlus className="h-4 w-4" />
-                    Queue
                     {queue.filter(q => q.status === 'pending' || q.status === 'generating').length > 0 && (
-                      <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-violet-600 text-white text-[10px] leading-none">
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] flex items-center justify-center px-1 rounded-full bg-violet-600 text-white text-[10px] leading-none font-medium">
                         {queue.filter(q => q.status === 'pending' || q.status === 'generating').length}
                       </span>
                     )}
@@ -1871,7 +2075,10 @@ export function GenSpace() {
           onClear={clearQueue}
           onCancel={cancelQueue}
           onSendToEditor={handleSendToEditor}
+          onBulkImport={handleBulkImport}
           isProcessing={isProcessingQueue}
+          autoContinue={autoContinue}
+          onAutoContinueChange={setAutoContinue}
         />
       )}
 
