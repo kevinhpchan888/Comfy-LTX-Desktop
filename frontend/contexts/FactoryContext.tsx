@@ -172,6 +172,41 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
   }, [manifest, shots, selectedShotId])
 
+  // Write factory status file for MCP server integration (debounced)
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (statusTimerRef.current) clearTimeout(statusTimerRef.current)
+    statusTimerRef.current = setTimeout(() => {
+      const projectPath = currentProject?.assetSavePath
+      if (!projectPath || !manifest) return
+
+      const errorShots = shots.filter(s => s.status === 'error' && s.error)
+      const status = {
+        timestamp: new Date().toISOString(),
+        project: manifest.project.name,
+        totalShots: shots.length,
+        idle: shots.filter(s => s.status === 'idle').length,
+        generatingFrame: shots.filter(s => s.status === 'generating-frame').length,
+        frameReady: shots.filter(s => s.status === 'frame-ready').length,
+        renderingVideo: shots.filter(s => s.status === 'rendering-video').length,
+        videoReady: shots.filter(s => s.status === 'video-ready').length,
+        approved: shots.filter(s => s.status === 'approved').length,
+        errors: errorShots.map(s => ({
+          shotId: s.manifest.id,
+          scene: s.manifest.scene,
+          error: s.error,
+          prompt: s.manifest.video.prompt.slice(0, 200),
+        })),
+      }
+
+      const statusPath = `${projectPath}/factory/.factory-status.json`
+      void window.electronAPI.ensureDirectory(`${projectPath}/factory`).then(() => {
+        void window.electronAPI.saveFile(statusPath, JSON.stringify(status, null, 2))
+      })
+    }, 2000)
+    return () => { if (statusTimerRef.current) clearTimeout(statusTimerRef.current) }
+  }, [shots, manifest, currentProject])
+
   // Pipeline state
   const [phase, setPhase] = useState<FactoryPhase>('idle')
   const [progress, setProgress] = useState<FactoryProgress>(INITIAL_PROGRESS)
@@ -410,7 +445,8 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const result = await window.electronAPI.generateVideo({
+      // Wrap IPC call with a safety timeout (5 minutes for image gen)
+      const genPromise = window.electronAPI.generateVideo({
         imageMode: true,
         prompt: imagePrompt,
         resolution: '1080p',
@@ -419,6 +455,10 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
         fps: 24,
         projectName: manifestRef.current.project.name,
       })
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Image generation timed out after 5 minutes')), 5 * 60 * 1000)
+      )
+      const result = await Promise.race([genPromise, timeoutPromise])
 
       if (result.status === 'complete' && result.image_path) {
         const projectPath = getProjectPath()

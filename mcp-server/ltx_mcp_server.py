@@ -703,6 +703,249 @@ async def suggest_gap_prompt(
         return json.dumps({"error": str(e)})
 
 
+# ─── Factory Error Monitoring ────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def get_factory_status(project_path: str) -> str:
+    """Read the current Shot Factory status including any errors.
+
+    The frontend writes a .factory-status.json file to the project's factory
+    directory whenever shot states change. This tool reads that file to give
+    you real-time visibility into the factory pipeline.
+
+    Args:
+        project_path: Absolute path to the project directory (the folder
+            containing the factory/ subfolder). You can find this from the
+            LTX Desktop window title or settings.
+
+    Returns:
+        JSON with shot counts by status (idle, generating, frame-ready,
+        rendering, video-ready, approved, errors) and detailed error info
+        for any failed shots including shot ID, scene, error message, and prompt.
+
+    Use this proactively to check for errors after batch operations.
+    When errors are found, use diagnose_factory_errors to get fix suggestions.
+    """
+    status_path = Path(project_path) / "factory" / ".factory-status.json"
+    if not status_path.exists():
+        return json.dumps({
+            "error": "No factory status file found",
+            "hint": f"Expected at {status_path}. Ensure the Shot Factory is open in LTX Desktop and has at least one shot.",
+        })
+
+    try:
+        data = json.loads(status_path.read_text())
+        return json.dumps(data, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to read status file: {e}"})
+
+
+@mcp.tool()
+async def diagnose_factory_errors(project_path: str) -> str:
+    """Analyze factory errors and provide actionable fix suggestions.
+
+    Reads the factory status, categorizes errors, and returns specific
+    remediation steps for each type of failure.
+
+    Args:
+        project_path: Absolute path to the project directory.
+
+    Returns:
+        JSON with categorized errors and suggested actions:
+        - OOM errors → reduce resolution/duration
+        - Connection errors → check ComfyUI is running
+        - Timeout errors → switch to fast model
+        - IPC errors → restart the app
+        - Missing node errors → restart ComfyUI
+    """
+    status_path = Path(project_path) / "factory" / ".factory-status.json"
+    if not status_path.exists():
+        return json.dumps({"status": "ok", "message": "No factory status file — no errors detected"})
+
+    try:
+        data = json.loads(status_path.read_text())
+    except Exception as e:
+        return json.dumps({"error": f"Failed to read status: {e}"})
+
+    errors = data.get("errors", [])
+    if not errors:
+        return json.dumps({
+            "status": "ok",
+            "message": "No errors found in factory",
+            "summary": {
+                "total_shots": data.get("totalShots", 0),
+                "idle": data.get("idle", 0),
+                "frame_ready": data.get("frameReady", 0),
+                "video_ready": data.get("videoReady", 0),
+                "approved": data.get("approved", 0),
+            },
+        })
+
+    # Categorize errors
+    categories: dict[str, list[dict[str, Any]]] = {
+        "oom": [],
+        "connection": [],
+        "timeout": [],
+        "ipc": [],
+        "missing_node": [],
+        "other": [],
+    }
+
+    for err in errors:
+        msg = (err.get("error") or "").lower()
+        entry = {
+            "shot_id": err.get("shotId"),
+            "scene": err.get("scene"),
+            "error": err.get("error"),
+        }
+
+        if "out of memory" in msg or "oom" in msg or "cuda" in msg:
+            categories["oom"].append(entry)
+        elif "econnrefused" in msg or "fetch failed" in msg or "connection" in msg:
+            categories["connection"].append(entry)
+        elif "timeout" in msg or "timed out" in msg:
+            categories["timeout"].append(entry)
+        elif "reply was never sent" in msg or "invoking remote method" in msg:
+            categories["ipc"].append(entry)
+        elif "not found" in msg and "node" in msg:
+            categories["missing_node"].append(entry)
+        else:
+            categories["other"].append(entry)
+
+    # Build recommendations
+    recommendations: list[dict[str, Any]] = []
+
+    if categories["oom"]:
+        recommendations.append({
+            "category": "Out of Memory",
+            "count": len(categories["oom"]),
+            "shot_ids": [e["shot_id"] for e in categories["oom"]],
+            "action": "Reduce resolution from 1080p to 720p or 512p, or shorten duration. Use update_settings to lower resolution.",
+            "auto_fixable": True,
+        })
+
+    if categories["connection"]:
+        recommendations.append({
+            "category": "Connection Error",
+            "count": len(categories["connection"]),
+            "shot_ids": [e["shot_id"] for e in categories["connection"]],
+            "action": "ComfyUI backend is not responding. Ask user to check if ComfyUI is running. May need to restart LTX Desktop.",
+            "auto_fixable": False,
+        })
+
+    if categories["timeout"]:
+        recommendations.append({
+            "category": "Timeout",
+            "count": len(categories["timeout"]),
+            "shot_ids": [e["shot_id"] for e in categories["timeout"]],
+            "action": "Generation took too long. Try switching to 'fast' model or reducing resolution/duration.",
+            "auto_fixable": True,
+        })
+
+    if categories["ipc"]:
+        recommendations.append({
+            "category": "IPC Error (reply never sent)",
+            "count": len(categories["ipc"]),
+            "shot_ids": [e["shot_id"] for e in categories["ipc"]],
+            "action": "The ComfyUI WebSocket connection dropped during generation. This is usually transient. Retry the failed shots. If persistent, restart LTX Desktop.",
+            "auto_fixable": True,
+        })
+
+    if categories["missing_node"]:
+        recommendations.append({
+            "category": "Missing ComfyUI Node",
+            "count": len(categories["missing_node"]),
+            "shot_ids": [e["shot_id"] for e in categories["missing_node"]],
+            "action": "ComfyUI is missing required custom nodes. Restart ComfyUI so it can load newly installed nodes.",
+            "auto_fixable": False,
+        })
+
+    if categories["other"]:
+        recommendations.append({
+            "category": "Other Errors",
+            "count": len(categories["other"]),
+            "shots": categories["other"],
+            "action": "Review error messages individually. May need manual intervention.",
+            "auto_fixable": False,
+        })
+
+    return json.dumps({
+        "status": "errors_found",
+        "total_errors": len(errors),
+        "recommendations": recommendations,
+        "raw_errors": errors,
+    }, indent=2)
+
+
+@mcp.tool()
+async def watch_factory_errors(project_path: str, poll_interval: float = 10.0, max_polls: int = 30) -> str:
+    """Poll factory status for errors over time. Use this during batch operations
+    to detect and respond to failures as they happen.
+
+    Args:
+        project_path: Absolute path to the project directory.
+        poll_interval: Seconds between status checks. Default 10.
+        max_polls: Maximum number of polls before returning. Default 30 (5 minutes at 10s).
+
+    Returns the first status update that contains errors, or a summary after max_polls.
+    """
+    status_path = Path(project_path) / "factory" / ".factory-status.json"
+    last_error_count = 0
+
+    for i in range(max_polls):
+        if status_path.exists():
+            try:
+                data = json.loads(status_path.read_text())
+                errors = data.get("errors", [])
+                generating = data.get("generatingFrame", 0) + data.get("renderingVideo", 0)
+
+                # If new errors appeared, report immediately
+                if len(errors) > last_error_count:
+                    new_errors = errors[last_error_count:]
+                    return json.dumps({
+                        "status": "new_errors_detected",
+                        "poll_number": i + 1,
+                        "new_errors": new_errors,
+                        "total_errors": len(errors),
+                        "factory_state": {
+                            "idle": data.get("idle", 0),
+                            "generating": generating,
+                            "frame_ready": data.get("frameReady", 0),
+                            "video_ready": data.get("videoReady", 0),
+                            "approved": data.get("approved", 0),
+                        },
+                        "hint": "Use diagnose_factory_errors to get fix suggestions",
+                    }, indent=2)
+
+                last_error_count = len(errors)
+
+                # If nothing is generating and no errors, pipeline may be done
+                if generating == 0 and len(errors) == 0 and i > 0:
+                    return json.dumps({
+                        "status": "pipeline_idle",
+                        "poll_number": i + 1,
+                        "message": "No active generations and no errors",
+                        "factory_state": {
+                            "idle": data.get("idle", 0),
+                            "frame_ready": data.get("frameReady", 0),
+                            "video_ready": data.get("videoReady", 0),
+                            "approved": data.get("approved", 0),
+                        },
+                    }, indent=2)
+
+            except Exception:
+                pass  # File may be mid-write
+
+        await asyncio.sleep(poll_interval)
+
+    return json.dumps({
+        "status": "max_polls_reached",
+        "polls": max_polls,
+        "message": f"Monitored for {max_polls * poll_interval}s with no new errors",
+    })
+
+
 # ─── Run Server ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

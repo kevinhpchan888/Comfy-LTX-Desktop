@@ -125,6 +125,8 @@ export function registerComfyUIHandlers(): void {
   ipcMain.handle('comfyui:generate', async (_event, params: GenerateParams) => {
     const settings = getComfyUISettings()
     const clientId = randomUUID()
+    // Resolve output directory early — needed in try, catch, and finally blocks
+    const outputDir = settings.comfyuiOutputDir || path.join(app.getPath('documents'), 'ComfyUI', 'output')
 
     try {
       // 1. Resolve dimensions
@@ -287,9 +289,6 @@ export function registerComfyUIHandlers(): void {
         hasZImage: useZImage && !params.imageMode && !uploadedImage,
       })
       progressTracker.connect(clientId)
-
-      // Resolve output directory early (needed for render tracking and file resolution)
-      const outputDir = settings.comfyuiOutputDir || path.join(app.getPath('documents'), 'ComfyUI', 'output')
 
       // 7. Submit to ComfyUI
       // Log all node class_types in the workflow for debugging
@@ -456,13 +455,20 @@ export function registerComfyUIHandlers(): void {
           error: `${nodeName} is not loaded in ComfyUI. Please restart ComfyUI so it can pick up the newly installed custom nodes, then try again.`,
         }
       }
-      // If it looks like a connection error, try re-discovering the port
+      // If it looks like a connection error, try re-discovering the port (with timeout)
       if (message.includes('ECONNREFUSED') || message.includes('Invalid argument') || message.includes('fetch failed')) {
         logger.info('Generation failed with connection error — re-discovering ComfyUI port...')
-        const reconnected = await comfyClient.checkHealth()
-        if (reconnected) {
-          logger.info(`ComfyUI re-discovered at ${comfyClient.getBaseUrl()} — please retry`)
-          return { status: 'error', error: `ComfyUI port changed to ${comfyClient.getBaseUrl()} — please try again` }
+        try {
+          const reconnected = await Promise.race([
+            comfyClient.checkHealth(),
+            new Promise<false>(resolve => setTimeout(() => resolve(false), 10_000)),
+          ])
+          if (reconnected) {
+            logger.info(`ComfyUI re-discovered at ${comfyClient.getBaseUrl()} — please retry`)
+            return { status: 'error', error: `ComfyUI port changed to ${comfyClient.getBaseUrl()} — please try again` }
+          }
+        } catch {
+          // Health check failed, fall through to generic error
         }
       }
       logger.error(`ComfyUI generation failed: ${message}`)

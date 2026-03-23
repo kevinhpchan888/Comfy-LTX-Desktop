@@ -90,10 +90,15 @@ export class ComfyUIProgressTracker {
 
     this.ws.on('error', (err) => {
       logger.error(`ComfyUI WebSocket error: ${err.message}`)
+      this.rejectCompletion(new Error(`WebSocket error: ${err.message}`))
     })
 
     this.ws.on('close', () => {
       logger.info('ComfyUI WebSocket closed')
+      // If we're still waiting for completion, reject the promise
+      if (this.completionResolve) {
+        this.rejectCompletion(new Error('WebSocket connection closed before generation completed'))
+      }
     })
   }
 
@@ -232,7 +237,7 @@ export class ComfyUIProgressTracker {
     return { ...this.progress }
   }
 
-  waitForCompletion(promptId: string): Promise<GenerationProgress> {
+  waitForCompletion(promptId: string, timeoutMs = 10 * 60 * 1000): Promise<GenerationProgress> {
     this.activePromptId = promptId
 
     return new Promise<GenerationProgress>((resolve, reject) => {
@@ -246,8 +251,21 @@ export class ComfyUIProgressTracker {
         return
       }
 
-      this.completionResolve = resolve
-      this.completionReject = reject
+      // Timeout guard: reject if ComfyUI goes unresponsive
+      const timer = setTimeout(() => {
+        this.completionResolve = null
+        this.completionReject = null
+        reject(new Error(`Generation timed out after ${Math.round(timeoutMs / 1000)}s — ComfyUI may be unresponsive`))
+      }, timeoutMs)
+
+      this.completionResolve = (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      }
+      this.completionReject = (reason) => {
+        clearTimeout(timer)
+        reject(reason)
+      }
     })
   }
 
