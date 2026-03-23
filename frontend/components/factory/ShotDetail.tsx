@@ -31,6 +31,7 @@ interface ShotDetailProps {
   onUpdateManifest: (updates: Partial<ManifestShot>) => void
   onDelete: () => void
   onSendToEditor: () => void
+  onSendToEditorAndExport: () => void
 }
 
 function Section({
@@ -72,6 +73,7 @@ export function ShotDetail({
   onUpdateManifest,
   onDelete,
   onSendToEditor,
+  onSendToEditorAndExport,
 }: ShotDetailProps) {
   const m = shot.manifest
   const activeFrame = shot.frameIterations[shot.activeFrameIndex]
@@ -439,13 +441,22 @@ export function ShotDetail({
         </div>
         {/* Send to Editor — only available when shot has rendered video */}
         {shot.videoIterations.length > 0 && (
-          <button
-            onClick={onSendToEditor}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-green-500"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Send to Video Editor
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onSendToEditor}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-green-500"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Send to Editor
+            </button>
+            <button
+              onClick={onSendToEditorAndExport}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+            >
+              <Film className="h-3.5 w-3.5" />
+              Send &amp; Stitch
+            </button>
+          </div>
         )}
       </div>
     </div>

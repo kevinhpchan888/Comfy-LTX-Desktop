@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   Image, Play, CheckCircle2, FolderOutput,
   Settings, MessageSquare, AlertTriangle,
-  Plus, Trash2, CheckSquare, X, Send,
+  Plus, Trash2, CheckSquare, X, Send, Film,
 } from 'lucide-react'
 import { useFactory } from '../contexts/FactoryContext'
 import { ManifestImporter } from '../components/factory/ManifestImporter'
@@ -51,6 +51,7 @@ export function ShotFactory() {
     deleteShots,
     addNewShot,
     sendToEditor,
+    sendToEditorAndExport,
   } = useFactory()
 
   const { settings, updateSettings } = useAppSettings()
@@ -140,6 +141,13 @@ export function ShotFactory() {
             >
               <Send className="h-3 w-3" />
               Send to Editor
+            </button>
+            <button
+              onClick={() => sendToEditorAndExport([...selectedShotIds])}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-400 transition-colors hover:bg-blue-500/10"
+            >
+              <Film className="h-3 w-3" />
+              Send &amp; Stitch
             </button>
             <button
               onClick={() => deleteShots([...selectedShotIds])}
@@ -315,6 +323,7 @@ export function ShotFactory() {
               onUpdateManifest={(updates) => updateShotManifest(selectedShot.manifest.id, updates)}
               onDelete={() => deleteShots([selectedShot.manifest.id])}
               onSendToEditor={() => sendToEditor([selectedShot.manifest.id])}
+              onSendToEditorAndExport={() => sendToEditorAndExport([selectedShot.manifest.id])}
             />
           </div>
         ) : (

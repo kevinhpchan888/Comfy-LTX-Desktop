@@ -15,7 +15,7 @@ import { parseManifest, manifestToShots, getShotStats, parseDuration } from '../
 import { saveFrame, saveVideo, organizeOutputs } from '../lib/factory-files'
 import { copyToAssetFolder } from '../lib/asset-copy'
 import { DEFAULT_COLOR_CORRECTION } from '../types/project'
-import type { TimelineClip } from '../types/project'
+import type { Asset, TimelineClip, Track } from '../types/project'
 import { detectGpuCapabilities, validateAllShotsGpu } from '../lib/factory-gpu'
 import { createLLMService } from '../lib/llm-service'
 import type { LLMMessage } from '../lib/llm-service'
@@ -78,6 +78,7 @@ interface FactoryContextType {
 
   // Send to Editor
   sendToEditor: (shotIds: string[]) => Promise<void>
+  sendToEditorAndExport: (shotIds: string[]) => Promise<void>
 
   // Stats
   stats: ReturnType<typeof getShotStats>
@@ -604,16 +605,18 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Send to Editor ─────────────────────────────────────────────────────
 
-  const sendToEditor = useCallback(async (shotIds: string[]) => {
-    if (!currentProjectId || !currentProject) return
+  /** Shared helper: copy shots to asset folder, create assets + timeline clips, switch to editor.
+   *  Returns the new clips and tracks (for optional auto-export). */
+  const sendShotsToTimeline = useCallback(async (shotIds: string[]): Promise<{ clips: TimelineClip[]; tracks: Track[] } | null> => {
+    if (!currentProjectId || !currentProject) return null
 
     const shotsToSend = shots.filter(s =>
       shotIds.includes(s.manifest.id) && s.videoIterations.length > 0
     )
-    if (shotsToSend.length === 0) return
+    if (shotsToSend.length === 0) return null
 
     const assetSavePath = currentProject.assetSavePath || undefined
-    const newAssets = []
+    const newAssets: Asset[] = []
 
     for (const shot of shotsToSend) {
       const activeVideo = shot.videoIterations[shot.activeVideoIndex]
@@ -633,10 +636,10 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       newAssets.push(asset)
     }
 
-    if (newAssets.length === 0) return
+    if (newAssets.length === 0) return null
 
     const timeline = getActiveTimeline(currentProjectId)
-    if (!timeline) return
+    if (!timeline) return null
 
     const videoTrackIndex = timeline.tracks.findIndex(t => t.kind === 'video' && !t.locked)
     const targetTrack = videoTrackIndex >= 0 ? videoTrackIndex : 0
@@ -673,12 +676,74 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
       return clip
     })
 
-    updateTimeline(currentProjectId, timeline.id, {
-      clips: [...timeline.clips, ...newClips],
-    })
-
+    const allClips = [...timeline.clips, ...newClips]
+    updateTimeline(currentProjectId, timeline.id, { clips: allClips })
     setCurrentTab('video-editor')
+
+    return { clips: allClips, tracks: timeline.tracks }
   }, [shots, currentProjectId, currentProject, addAsset, getActiveTimeline, updateTimeline, setCurrentTab])
+
+  const sendToEditor = useCallback(async (shotIds: string[]) => {
+    await sendShotsToTimeline(shotIds)
+  }, [sendShotsToTimeline])
+
+  const sendToEditorAndExport = useCallback(async (shotIds: string[]) => {
+    const result = await sendShotsToTimeline(shotIds)
+    if (!result) return
+
+    // Determine export dimensions from the first shot's resolution
+    const firstShot = shots.find(s => shotIds.includes(s.manifest.id) && s.videoIterations.length > 0)
+    const resStr = firstShot?.manifest.video.resolution || '720p'
+    const resDims: Record<string, [number, number]> = {
+      '4K': [3840, 2160], '2160p': [3840, 2160],
+      '1440p': [2560, 1440],
+      '1080p': [1920, 1080],
+      '720p': [1280, 720],
+      '540p': [960, 540],
+    }
+    const [exportWidth, exportHeight] = resDims[resStr] || resDims['720p']
+    const fps = firstShot?.manifest.video.fps || 24
+
+    const projectName = currentProject?.name || 'factory-export'
+    const filePath = await window.electronAPI?.showSaveDialog({
+      title: 'Export Stitched Video',
+      defaultPath: `${projectName}_stitched.mp4`,
+      filters: [
+        { name: 'MP4 Video', extensions: ['mp4'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    })
+    if (!filePath) return
+
+    const exportClips = result.clips
+      .filter(c => c.type === 'video' || c.type === 'image' || c.type === 'audio')
+      .filter(c => result.tracks[c.trackIndex]?.enabled !== false)
+      .map(c => ({
+        url: c.asset?.url || c.importedUrl || '',
+        type: c.type as string,
+        startTime: c.startTime,
+        duration: c.duration,
+        trimStart: c.trimStart,
+        speed: c.speed || 1,
+        reversed: c.reversed || false,
+        flipH: c.flipH || false,
+        flipV: c.flipV || false,
+        opacity: c.opacity ?? 100,
+        trackIndex: c.trackIndex,
+        muted: c.muted || false,
+        volume: c.volume ?? 1,
+      }))
+
+    await window.electronAPI?.exportNative({
+      clips: exportClips,
+      outputPath: filePath,
+      codec: 'h264',
+      width: exportWidth,
+      height: exportHeight,
+      fps,
+      quality: 20,
+    })
+  }, [sendShotsToTimeline, shots, currentProject])
 
   // ─── GPU ─────────────────────────────────────────────────────────────────
 
@@ -904,6 +969,7 @@ ${JSON.stringify(manifest, null, 2)}`
     applyShotPreview,
     isChatStreaming,
     sendToEditor,
+    sendToEditorAndExport,
     stats,
   }
 
