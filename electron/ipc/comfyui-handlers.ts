@@ -120,9 +120,22 @@ function toFilePath(input: string): string {
 }
 
 let activePromptId: string | null = null
+let generationLock: Promise<unknown> = Promise.resolve()
 
 export function registerComfyUIHandlers(): void {
   ipcMain.handle('comfyui:generate', async (_event, params: GenerateParams) => {
+    // Serialize generations — only one at a time to prevent WebSocket conflicts
+    const previousLock = generationLock
+    let releaseLock: () => void = () => {}
+    generationLock = new Promise<void>(resolve => { releaseLock = resolve })
+
+    try {
+      // Wait for any previous generation to finish
+      await previousLock
+    } catch {
+      // Previous generation errored — that's fine, we can proceed
+    }
+
     const settings = getComfyUISettings()
     const clientId = randomUUID()
     // Resolve output directory early — needed in try, catch, and finally blocks
@@ -492,6 +505,7 @@ export function registerComfyUIHandlers(): void {
       activePromptId = null
       progressTracker.disconnect()
       progressTracker.reset()
+      releaseLock()
     }
   })
 
