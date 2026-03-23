@@ -250,7 +250,7 @@ export function ShotFactory() {
               icon={<Play className="h-3.5 w-3.5" />}
               label={`Render All (${stats.framesReady - stats.rendered})`}
               onClick={renderAllVideos}
-              disabled={stats.framesReady <= stats.rendered || isProcessing}
+              disabled={stats.framesReady <= stats.rendered}
             />
             {/* Auto-render toggle */}
             <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] cursor-pointer hover:bg-zinc-800/50 transition-colors">
@@ -274,7 +274,7 @@ export function ShotFactory() {
               icon={<FolderOutput className="h-3.5 w-3.5" />}
               label="Organize Output"
               onClick={organizeOutput}
-              disabled={stats.rendered === 0 || isProcessing}
+              disabled={stats.rendered === 0}
             />
             {/* Add Shot / Clear All */}
             <div className="flex gap-1.5">
