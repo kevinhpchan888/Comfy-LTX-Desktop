@@ -245,4 +245,26 @@ export function registerFileHandlers(): void {
       return { success: false, error: String(error) }
     }
   })
+
+  // Download a URL to a local file path (for saving web images)
+  ipcMain.handle('download-url', async (_event, url: string, destPath: string) => {
+    try {
+      validatePath(destPath, getAllowedRoots())
+      const dir = path.dirname(destPath)
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+
+      const { net } = await import('electron')
+      const response = await net.fetch(url)
+      if (!response.ok) {
+        return { success: false, error: `HTTP ${response.status}: ${response.statusText}` }
+      }
+      const buffer = Buffer.from(await response.arrayBuffer())
+      fs.writeFileSync(destPath, buffer)
+      approvePath(destPath)
+      return { success: true, path: destPath }
+    } catch (error) {
+      logger.error(`Error downloading URL: ${error}`)
+      return { success: false, error: String(error) }
+    }
+  })
 }

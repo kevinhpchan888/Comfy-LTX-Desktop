@@ -54,6 +54,8 @@ interface FactoryContextType {
   // Frame generation
   generateFrame: (shotId: string) => Promise<void>
   generateAllFrames: () => Promise<void>
+  uploadFrameImage: (shotId: string, filePath: string) => Promise<void>
+  useWebImage: (shotId: string, imageUrl: string, attribution?: string) => Promise<void>
 
   // Video rendering
   renderVideo: (shotId: string) => Promise<void>
@@ -490,6 +492,106 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     setProgress(prev => ({ ...prev, completed: shotsNeedingFrames.length, currentShotId: null }))
     setPhase(cancelledRef.current ? 'idle' : 'reviewing')
   }, [generateFrame])
+
+  // ─── Upload / Web Image ────────────────────────────────────────────────────
+
+  /** Upload a local image file as the frame for a shot. */
+  const uploadFrameImage = useCallback(async (shotId: string, filePath: string) => {
+    const projectPath = getProjectPath()
+    if (!projectPath) return
+
+    try {
+      setShots(prev => prev.map(s =>
+        s.manifest.id === shotId ? { ...s, status: 'generating-frame', error: undefined } : s
+      ))
+
+      const currentShot = shotsRef.current.find(s => s.manifest.id === shotId)
+      const iterNum = (currentShot?.frameIterations.length || 0) + 1
+      const saved = await saveFrame(shotId, filePath, projectPath, 'first', iterNum)
+
+      const iteration: ShotIteration = {
+        id: crypto.randomUUID(),
+        path: saved.path,
+        url: saved.url,
+        createdAt: Date.now(),
+      }
+
+      setShots(prev => prev.map(s => {
+        if (s.manifest.id !== shotId) return s
+        const newIterations = [...s.frameIterations, iteration]
+        return {
+          ...s,
+          status: 'frame-ready',
+          frameIterations: newIterations,
+          activeFrameIndex: newIterations.length - 1,
+          error: undefined,
+        }
+      }))
+    } catch (err) {
+      setShots(prev => prev.map(s =>
+        s.manifest.id === shotId
+          ? { ...s, status: 'error', error: err instanceof Error ? err.message : 'Upload failed' }
+          : s
+      ))
+    }
+  }, [getProjectPath])
+
+  /** Download a web image and use it as the frame for a shot. */
+  const useWebImage = useCallback(async (shotId: string, imageUrl: string, attribution?: string) => {
+    const projectPath = getProjectPath()
+    if (!projectPath) return
+
+    try {
+      setShots(prev => prev.map(s =>
+        s.manifest.id === shotId ? { ...s, status: 'generating-frame', error: undefined } : s
+      ))
+
+      // Download the image to a temp path first
+      const ext = imageUrl.match(/\.(png|jpg|jpeg|webp|gif|bmp)/i)?.[1] || 'jpg'
+      const currentShot = shotsRef.current.find(s => s.manifest.id === shotId)
+      const iterNum = (currentShot?.frameIterations.length || 0) + 1
+      const dir = `${projectPath}/factory/${shotId}`
+      await window.electronAPI.ensureDirectory(dir)
+      const destPath = `${dir}/${shotId}_web_v${iterNum}.${ext}`
+
+      const result = await window.electronAPI.downloadUrl(imageUrl, destPath)
+      if (!result.success) {
+        throw new Error(result.error || 'Download failed')
+      }
+
+      const normalizedPath = result.path || destPath
+      const url = normalizedPath.startsWith('/') ? `file://${normalizedPath}` : `file:///${normalizedPath.replace(/\\/g, '/')}`
+
+      const iteration: ShotIteration = {
+        id: crypto.randomUUID(),
+        path: normalizedPath,
+        url,
+        createdAt: Date.now(),
+      }
+
+      setShots(prev => prev.map(s => {
+        if (s.manifest.id !== shotId) return s
+        const newIterations = [...s.frameIterations, iteration]
+        return {
+          ...s,
+          status: 'frame-ready',
+          frameIterations: newIterations,
+          activeFrameIndex: newIterations.length - 1,
+          error: undefined,
+        }
+      }))
+
+      if (attribution) {
+        console.log(`[Factory] Image for ${shotId}: ${attribution}`)
+      }
+    } catch (err) {
+      setShots(prev => prev.map(s =>
+        s.manifest.id === shotId
+          ? { ...s, status: 'error', error: err instanceof Error ? err.message : 'Image download failed' }
+          : s
+      ))
+    }
+  }, [getProjectPath])
 
   // ─── Video Rendering ─────────────────────────────────────────────────────
 
@@ -1109,6 +1211,8 @@ ${JSON.stringify(manifest, null, 2)}`
     reorderShots,
     generateFrame,
     generateAllFrames,
+    uploadFrameImage,
+    useWebImage,
     renderVideo,
     renderAllVideos,
     approveIteration,

@@ -32,6 +32,7 @@ export interface AppSettings {
   factoryProxyUrl: string
   factoryProxyToken: string
   factoryProxyModel: string
+  factoryPexelsApiKey: string
   factoryDefaultDuration: number
   factoryDefaultResolution: string
   factoryDefaultFps: number
@@ -76,6 +77,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   factoryProxyUrl: 'http://localhost:4000',
   factoryProxyToken: '',
   factoryProxyModel: 'claude-sonnet-4-6',
+  factoryPexelsApiKey: '',
   factoryDefaultDuration: 5,
   factoryDefaultResolution: '720p',
   factoryDefaultFps: 24,

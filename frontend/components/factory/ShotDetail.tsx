@@ -16,9 +16,11 @@ import {
   Trash2,
   Pencil,
   Send,
+  ImagePlus,
 } from 'lucide-react'
 import type { FactoryShot, ManifestShot, ValidationWarning } from '../../types/factory'
 import { parseDuration } from '../../lib/factory-manifest'
+import { ImageSearchPanel } from './ImageSearchPanel'
 
 interface ShotDetailProps {
   shot: FactoryShot
@@ -33,6 +35,9 @@ interface ShotDetailProps {
   onSendToEditor: () => void
   onSendToEditorAndExport: () => void
   onImageDoubleClick?: () => void
+  onUploadImage: (filePath: string) => void
+  onUseWebImage: (url: string, attribution?: string) => void
+  pexelsApiKey: string
   autoRenderAll: boolean
   onToggleAutoRender: () => void
 }
@@ -78,6 +83,9 @@ export function ShotDetail({
   onSendToEditor,
   onSendToEditorAndExport,
   onImageDoubleClick,
+  onUploadImage,
+  onUseWebImage,
+  pexelsApiKey,
   autoRenderAll,
   onToggleAutoRender,
 }: ShotDetailProps) {
@@ -89,6 +97,7 @@ export function ShotDetail({
   // Inline editing state
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [showImageSources, setShowImageSources] = useState(false)
 
   // VRAM estimate
   const estimatedVram = vramGb > 0 ? Math.round(vramGb * 0.8) : 0
@@ -203,26 +212,64 @@ export function ShotDetail({
               <span className="text-[10px] text-zinc-500">
                 {activeFrame.seed !== undefined ? `Seed: ${activeFrame.seed}` : 'No seed info'}
               </span>
-              <button
-                onClick={onGenerateFrame}
-                className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-zinc-700"
-              >
-                <RefreshCw className="h-3 w-3" />
-                Regenerate
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowImageSources(!showImageSources)}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors ${
+                    showImageSources ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                  }`}
+                  title="Upload or search for image"
+                >
+                  <ImagePlus className="h-3 w-3" />
+                  Replace
+                </button>
+                <button
+                  onClick={onGenerateFrame}
+                  className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-zinc-700"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Regenerate
+                </button>
+              </div>
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-900 p-6">
             <Image className="h-8 w-8 text-zinc-600" />
             <p className="text-xs text-zinc-500">No frame generated yet</p>
-            <button
-              onClick={onGenerateFrame}
-              className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
-            >
-              Generate Image
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={onGenerateFrame}
+                className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+              >
+                Generate Image
+              </button>
+              <button
+                onClick={() => setShowImageSources(!showImageSources)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  showImageSources ? 'bg-violet-600 text-white' : 'border border-zinc-600 text-zinc-300 hover:bg-zinc-800'
+                }`}
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                Upload / Search
+              </button>
+            </div>
           </div>
+        )}
+        {/* Image source panel: upload, Pexels, Google */}
+        {showImageSources && (
+          <ImageSearchPanel
+            onSelectLocalFile={(filePath) => {
+              onUploadImage(filePath)
+              setShowImageSources(false)
+            }}
+            onSelectWebImage={(url, attribution) => {
+              onUseWebImage(url, attribution)
+              setShowImageSources(false)
+            }}
+            pexelsApiKey={pexelsApiKey}
+            defaultQuery={m.description || m.video.prompt.slice(0, 80)}
+          />
         )}
         {/* First frame prompt (editable) */}
         {m.frames.first && m.frames.first.source === 'generate' && (

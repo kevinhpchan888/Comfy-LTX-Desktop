@@ -84,6 +84,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('search-directory-for-files', dir, filenames),
   copyFile: (src: string, dest: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('copy-file', src, dest),
+  downloadUrl: (url: string, destPath: string): Promise<{ success: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('download-url', url, destPath),
 
   // Check multiple files at once
   checkFilesExist: (filePaths: string[]): Promise<Record<string, boolean>> =>
@@ -239,6 +241,7 @@ declare global {
       showOpenDirectoryDialog: (options: { title?: string }) => Promise<string | null>
       searchDirectoryForFiles: (dir: string, filenames: string[]) => Promise<Record<string, string>>
       copyFile: (src: string, dest: string) => Promise<{ success: boolean; error?: string }>
+      downloadUrl: (url: string, destPath: string) => Promise<{ success: boolean; path?: string; error?: string }>
       checkFilesExist: (filePaths: string[]) => Promise<Record<string, boolean>>
       showOpenFileDialog: (options: { title?: string; filters?: { name: string; extensions: string[] }[]; properties?: string[] }) => Promise<string[] | null>
       exportNative: (data: {

@@ -247,6 +247,28 @@ export function FactorySettings({
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white"
             />
           </FieldGroup>
+
+          <div className="border-t border-zinc-800 pt-4 mt-2">
+            <h4 className="text-sm font-medium text-zinc-300 mb-3">Image Sources</h4>
+            <FieldGroup label="Pexels API Key">
+              <input
+                value={settings.factoryPexelsApiKey}
+                onChange={e => onUpdate({ factoryPexelsApiKey: e.target.value })}
+                placeholder="Get free key at pexels.com/api"
+                type="password"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600"
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">
+                Free API key for searching stock images. Get one at{' '}
+                <button
+                  onClick={() => window.open('https://www.pexels.com/api/', '_blank')}
+                  className="text-violet-400 hover:underline"
+                >
+                  pexels.com/api
+                </button>
+              </p>
+            </FieldGroup>
+          </div>
         </div>
       )}
 

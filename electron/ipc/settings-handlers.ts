@@ -37,6 +37,7 @@ export interface ComfyUISettings {
   factoryProxyUrl: string
   factoryProxyToken: string
   factoryProxyModel: string
+  factoryPexelsApiKey: string
   factoryDefaultDuration: number
   factoryDefaultResolution: string
   factoryDefaultFps: number
@@ -84,6 +85,7 @@ function getDefaultSettings(): ComfyUISettings {
     factoryProxyUrl: 'http://localhost:4000',
     factoryProxyToken: '',
     factoryProxyModel: 'ollama/qwen3-32b',
+    factoryPexelsApiKey: '',
     factoryDefaultDuration: 5,
     factoryDefaultResolution: '720p',
     factoryDefaultFps: 24,

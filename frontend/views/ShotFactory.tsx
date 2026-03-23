@@ -30,6 +30,8 @@ export function ShotFactory() {
     cancelPipeline,
     generateFrame,
     generateAllFrames,
+    uploadFrameImage,
+    useWebImage,
     renderVideo,
     renderAllVideos,
     approveIteration,
@@ -370,6 +372,9 @@ export function ShotFactory() {
               onSendToEditor={() => sendToEditor([selectedShot.manifest.id])}
               onSendToEditorAndExport={() => sendToEditorAndExport([selectedShot.manifest.id])}
               onImageDoubleClick={() => setLightboxShotId(selectedShot.manifest.id)}
+              onUploadImage={(filePath) => uploadFrameImage(selectedShot.manifest.id, filePath)}
+              onUseWebImage={(url, attr) => useWebImage(selectedShot.manifest.id, url, attr)}
+              pexelsApiKey={settings.factoryPexelsApiKey}
               autoRenderAll={autoRenderAll}
               onToggleAutoRender={() => toggleShotAutoRender(selectedShot.manifest.id)}
             />
