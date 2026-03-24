@@ -38,6 +38,10 @@ interface ShotDetailProps {
   onSetActiveFrame: (index: number) => void
   onUploadImage: (filePath: string) => void
   onUseWebImage: (url: string, attribution?: string) => void
+  /** Render progress 0-100 when shot is rendering, undefined otherwise */
+  renderProgress?: number
+  /** Status message from the generation queue during rendering */
+  renderStatusMessage?: string
   onRemotionRequest: (description: string) => void
   pexelsApiKey: string
   autoRenderAll: boolean
@@ -92,6 +96,8 @@ export function ShotDetail({
   pexelsApiKey,
   autoRenderAll,
   onToggleAutoRender,
+  renderProgress,
+  renderStatusMessage,
 }: ShotDetailProps) {
   const m = shot.manifest
   const duration = parseDuration(m.video.duration)
@@ -557,12 +563,31 @@ export function ShotDetail({
           </button>
           <button
             onClick={onRenderVideo}
-            disabled={shot.status === 'disabled' || shot.status === 'idle'}
-            className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={shot.status === 'disabled' || shot.status === 'idle' || shot.status === 'rendering-video'}
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 relative overflow-hidden ${
+              shot.status === 'rendering-video'
+                ? 'bg-blue-700'
+                : 'bg-blue-600 hover:bg-blue-500'
+            }`}
           >
-            Render Video
+            {shot.status === 'rendering-video' && renderProgress !== undefined && (
+              <div
+                className="absolute inset-0 bg-blue-500/30 transition-all duration-500"
+                style={{ width: `${renderProgress}%` }}
+              />
+            )}
+            <span className="relative">
+              {shot.status === 'rendering-video'
+                ? renderProgress !== undefined
+                  ? `Rendering… ${Math.round(renderProgress)}%`
+                  : 'Rendering…'
+                : 'Render Video'}
+            </span>
           </button>
         </div>
+        {shot.status === 'rendering-video' && renderStatusMessage && (
+          <p className="text-[10px] text-blue-400/70 px-1 truncate">{renderStatusMessage}</p>
+        )}
         <label className="flex items-center gap-2 px-1 cursor-pointer">
           <input
             type="checkbox"

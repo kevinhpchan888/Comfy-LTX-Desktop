@@ -16,6 +16,7 @@ import { FactorySettings } from '../components/factory/FactorySettings'
 import { NewShotDialog } from '../components/factory/NewShotDialog'
 import { ClaudeConnectionIndicator } from '../components/factory/ClaudeConnectionIndicator'
 import { useAppSettings } from '../contexts/AppSettingsContext'
+import { GenerationEngineIndicator } from '../components/factory/GenerationEngineIndicator'
 
 export function ShotFactory() {
   const {
@@ -63,6 +64,7 @@ export function ShotFactory() {
     autoRenderAll,
     setAutoRenderAll,
     toggleShotAutoRender,
+    queue,
   } = useFactory()
 
   const { settings, updateSettings } = useAppSettings()
@@ -80,6 +82,11 @@ export function ShotFactory() {
   const selectedShot = shots.find(s => s.manifest.id === selectedShotId) || null
   const comparisonShot = shots.find(s => s.manifest.id === comparisonShotId) || null
   const hasMultiSelect = selectedShotIds.size > 0
+
+  // Compute render progress for the selected shot
+  const selectedShotQueueItem = selectedShot?.queueItemId
+    ? queue.find(q => q.id === selectedShot.queueItemId)
+    : undefined
 
   // Ctrl+K toggles creative console
   useEffect(() => {
@@ -198,24 +205,35 @@ export function ShotFactory() {
             </div>
           </div>
 
-          {/* GPU Info */}
-          {gpuInfo && (
-            <div className="px-3 py-2 border-b border-zinc-800/60">
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span className={`w-1.5 h-1.5 rounded-full ${gpuInfo.available ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-zinc-400 truncate">{gpuInfo.name}</span>
-              </div>
-              {gpuInfo.vramGb > 0 && (
-                <p className="text-[10px] text-zinc-600 mt-0.5">{gpuInfo.vramGb} GB VRAM</p>
-              )}
-              {gpuWarnings.length > 0 && (
-                <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-400">
-                  <AlertTriangle className="h-3 w-3" />
-                  <span>{gpuWarnings.length} warning{gpuWarnings.length !== 1 ? 's' : ''}</span>
-                </div>
-              )}
+          {/* Generation Engine + GPU Info */}
+          <div className="px-3 py-2 border-b border-zinc-800/60">
+            <div className="flex items-center justify-between mb-1.5">
+              <GenerationEngineIndicator />
+              <button
+                onClick={() => setShowSettings(true)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Switch
+              </button>
             </div>
-          )}
+            {gpuInfo && (
+              <>
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className={`w-1.5 h-1.5 rounded-full ${gpuInfo.available ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className="text-zinc-400 truncate">{gpuInfo.name}</span>
+                </div>
+                {gpuInfo.vramGb > 0 && (
+                  <p className="text-[10px] text-zinc-600 mt-0.5">{gpuInfo.vramGb} GB VRAM</p>
+                )}
+                {gpuWarnings.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-400">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>{gpuWarnings.length} warning{gpuWarnings.length !== 1 ? 's' : ''}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Scene tree (scrollable) with drag-to-reorder */}
           <div className="flex-1 overflow-y-auto px-2 py-2">
@@ -433,6 +451,8 @@ export function ShotFactory() {
               pexelsApiKey={settings.factoryPexelsApiKey}
               autoRenderAll={autoRenderAll}
               onToggleAutoRender={() => toggleShotAutoRender(selectedShot.manifest.id)}
+              renderProgress={selectedShot.status === 'rendering-video' && selectedShotQueueItem ? selectedShotQueueItem.progress : undefined}
+              renderStatusMessage={selectedShot.status === 'rendering-video' && selectedShotQueueItem ? selectedShotQueueItem.statusMessage : undefined}
             />
           </div>
         ) : (

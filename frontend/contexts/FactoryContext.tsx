@@ -97,6 +97,9 @@ interface FactoryContextType {
 
   // Stats
   stats: ReturnType<typeof getShotStats>
+
+  // Queue (for render progress tracking)
+  queue: QueueItem[]
 }
 
 const FactoryContext = createContext<FactoryContextType | null>(null)
@@ -1398,6 +1401,7 @@ ${JSON.stringify(manifest, null, 2)}`
     setAutoRenderAll,
     toggleShotAutoRender,
     stats,
+    queue,
   }
 
   return (
