@@ -287,7 +287,7 @@ export class ComfyUIProgressTracker {
     return { ...this.progress }
   }
 
-  waitForCompletion(promptId: string, timeoutMs = 15 * 60 * 1000): Promise<GenerationProgress> {
+  waitForCompletion(promptId: string, timeoutMs = 30 * 60 * 1000): Promise<GenerationProgress> {
     this.activePromptId = promptId
 
     return new Promise<GenerationProgress>((resolve, reject) => {

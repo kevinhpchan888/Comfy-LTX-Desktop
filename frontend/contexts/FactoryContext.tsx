@@ -478,8 +478,9 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
         fps: 24,
         projectName: manifestRef.current.project.name,
       })
+      const timeoutMs = settings.factoryRenderTimeout || 1800000 // default 30 min
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Image generation timed out after 10 minutes')), 10 * 60 * 1000)
+        setTimeout(() => reject(new Error(`Image generation timed out after ${Math.round(timeoutMs / 60000)} minutes`)), timeoutMs)
       )
       const result = await Promise.race([genPromise, timeoutPromise])
 
@@ -547,7 +548,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
           : s
       ))
     }
-  }, [getProjectPath])
+  }, [getProjectPath, settings.factoryRenderTimeout])
 
   const generateAllFrames = useCallback(async () => {
     cancelledRef.current = false
