@@ -17,6 +17,7 @@ import {
   Pencil,
   Send,
   ImagePlus,
+  Copy,
 } from 'lucide-react'
 import type { FactoryShot, ManifestShot, ValidationWarning, FrameSlot } from '../../types/factory'
 import { parseDuration, getSlotFrame } from '../../lib/factory-manifest'
@@ -48,6 +49,25 @@ interface ShotDetailProps {
   onToggleAutoRender: () => void
   /** Called when user double-clicks a video to open it fullscreen */
   onVideoDoubleClick?: (videoIndex: number) => void
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        })
+      }}
+      className="rounded p-0.5 text-zinc-500 hover:text-violet-400 transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+    </button>
+  )
 }
 
 function Section({
@@ -352,14 +372,19 @@ export function ShotDetail({
           <div className="mt-2">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-medium text-zinc-500">First Frame Prompt</span>
-              {editingField !== 'firstFramePrompt' && (
-                <button
-                  onClick={() => startEdit('firstFramePrompt', m.frames.first && m.frames.first.source === 'generate' ? m.frames.first.prompt : '')}
-                  className="rounded p-0.5 text-zinc-500 hover:text-violet-400"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-              )}
+              <div className="flex items-center gap-0.5">
+                {editingField !== 'firstFramePrompt' && m.frames.first && m.frames.first.source === 'generate' && (
+                  <CopyButton text={m.frames.first.prompt} />
+                )}
+                {editingField !== 'firstFramePrompt' && (
+                  <button
+                    onClick={() => startEdit('firstFramePrompt', m.frames.first && m.frames.first.source === 'generate' ? m.frames.first.prompt : '')}
+                    className="rounded p-0.5 text-zinc-500 hover:text-violet-400"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
             {editingField === 'firstFramePrompt' ? (
               <textarea
@@ -394,13 +419,18 @@ export function ShotDetail({
               className="w-full resize-none rounded border border-violet-500 bg-zinc-900 px-3 py-2 text-xs text-zinc-300 outline-none"
             />
           ) : (
-            <div
-              className="group max-h-40 cursor-pointer overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-900 p-3 text-xs text-zinc-300 transition-colors hover:bg-zinc-800"
-              onClick={() => startEdit('videoPrompt', m.video.prompt)}
-              title="Click to edit"
-            >
-              {m.video.prompt}
-              <Pencil className="ml-1 inline-block h-3 w-3 text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100" />
+            <div className="group relative">
+              <div
+                className="max-h-40 cursor-pointer overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-900 p-3 pr-8 text-xs text-zinc-300 transition-colors hover:bg-zinc-800"
+                onClick={() => startEdit('videoPrompt', m.video.prompt)}
+                title="Click to edit"
+              >
+                {m.video.prompt}
+                <Pencil className="ml-1 inline-block h-3 w-3 text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100" />
+              </div>
+              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={m.video.prompt} />
+              </div>
             </div>
           )}
         </div>
