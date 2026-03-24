@@ -11,6 +11,7 @@ import type {
   ManifestShot,
   ValidationWarning,
   FrameSlot,
+  ShotStatus,
 } from '../types/factory'
 import { parseManifest, manifestToShots, getShotStats, parseDuration } from '../lib/factory-manifest'
 import { saveFrame, saveVideo, organizeOutputs } from '../lib/factory-files'
@@ -154,8 +155,20 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
   if (!restoredRef.current) restoredRef.current = true
 
   // Manifest & shots
+  // On restore, reset transient statuses that can't survive an app restart
+  const sanitizedShots = (restored?.shots ?? []).map(s => {
+    if (s.status === 'generating-frame') {
+      // Was mid-generation when app closed — reset based on whether frames exist
+      return { ...s, status: (s.frameIterations.length > 0 ? 'frame-ready' : 'error') as ShotStatus, error: s.error || 'Generation interrupted — app was closed during generation' }
+    }
+    if (s.status === 'rendering-video') {
+      // Was mid-render when app closed — reset to frame-ready so user can re-render
+      return { ...s, status: 'frame-ready' as ShotStatus, error: undefined, queueItemId: undefined }
+    }
+    return s
+  })
   const [manifest, setManifest] = useState<FactoryManifest | null>(restored?.manifest ?? null)
-  const [shots, setShots] = useState<FactoryShot[]>(restored?.shots ?? [])
+  const [shots, setShots] = useState<FactoryShot[]>(sanitizedShots)
   // Refs for async loops to avoid stale closure reads
   const shotsRef = useRef(shots)
   shotsRef.current = shots
