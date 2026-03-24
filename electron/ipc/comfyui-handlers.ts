@@ -809,8 +809,8 @@ export function registerComfyUIHandlers(): void {
     const promptId = promptResult.prompt_id
     logger.info(`WhisperX workflow submitted: ${promptId}`)
 
-    // 4. Poll for completion (timeout 5 min)
-    const deadline = Date.now() + 300_000
+    // 4. Poll for completion (timeout 30 min)
+    const deadline = Date.now() + 1_800_000
     while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 500))
       const history = await comfyClient.getHistory(promptId)

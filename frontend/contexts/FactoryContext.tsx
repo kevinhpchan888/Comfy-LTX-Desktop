@@ -468,7 +468,7 @@ export function FactoryProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Wrap IPC call with a safety timeout (5 minutes for image gen)
+      // Wrap IPC call with a safety timeout (default 30 minutes for image gen)
       const genPromise = window.electronAPI.generateVideo({
         imageMode: true,
         prompt: imagePrompt,

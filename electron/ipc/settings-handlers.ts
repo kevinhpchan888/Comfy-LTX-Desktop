@@ -92,7 +92,7 @@ function getDefaultSettings(): ComfyUISettings {
     factoryDefaultIterations: 3,
     factoryDefaultAspectRatio: '16:9',
     factoryDelayBetweenShots: 5000,
-    factoryRenderTimeout: 300000,
+    factoryRenderTimeout: 1800000,
     factoryMaxRetries: 3,
     factoryProgressPollInterval: 3000,
     factoryAutoSaveInterval: 30000,
