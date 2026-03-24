@@ -10,6 +10,7 @@ import { StoryboardGrid } from '../components/factory/StoryboardGrid'
 import { ShotDetail } from '../components/factory/ShotDetail'
 import { ComparisonViewer } from '../components/factory/ComparisonViewer'
 import { ImageLightbox } from '../components/factory/ImageLightbox'
+import { VideoLightbox } from '../components/factory/VideoLightbox'
 import { FactoryProgressBar } from '../components/factory/FactoryProgressBar'
 import { CreativeConsole } from '../components/factory/CreativeConsole'
 import { FactorySettings } from '../components/factory/FactorySettings'
@@ -77,7 +78,9 @@ export function ShotFactory() {
   const [editingScene, setEditingScene] = useState<string | null>(null)
   const [editSceneValue, setEditSceneValue] = useState('')
   const [dragShotId, setDragShotId] = useState<string | null>(null)
+  const [videoLightbox, setVideoLightbox] = useState<{ shotId: string; videoIndex: number } | null>(null)
   const lightboxShot = shots.find(s => s.manifest.id === lightboxShotId) || null
+  const videoLightboxShot = videoLightbox ? shots.find(s => s.manifest.id === videoLightbox.shotId) || null : null
 
   const selectedShot = shots.find(s => s.manifest.id === selectedShotId) || null
   const comparisonShot = shots.find(s => s.manifest.id === comparisonShotId) || null
@@ -409,10 +412,10 @@ export function ShotFactory() {
                 return
               }
               const shot = shots.find(s => s.manifest.id === id)
-              if (shot && shot.frameIterations.length > 0) {
+              if (shot && shot.videoIterations.length > 0) {
+                setVideoLightbox({ shotId: id, videoIndex: shot.activeVideoIndex >= 0 ? shot.activeVideoIndex : 0 })
+              } else if (shot && shot.frameIterations.length > 0) {
                 setLightboxShotId(id)
-              } else if (shot && shot.videoIterations.length > 0) {
-                setComparisonShotId(id)
               }
             }}
             onReorder={reorderShots}
@@ -453,6 +456,7 @@ export function ShotFactory() {
               onToggleAutoRender={() => toggleShotAutoRender(selectedShot.manifest.id)}
               renderProgress={selectedShot.status === 'rendering-video' && selectedShotQueueItem ? selectedShotQueueItem.progress : undefined}
               renderStatusMessage={selectedShot.status === 'rendering-video' && selectedShotQueueItem ? selectedShotQueueItem.statusMessage : undefined}
+              onVideoDoubleClick={(idx) => setVideoLightbox({ shotId: selectedShot.manifest.id, videoIndex: idx })}
             />
           </div>
         ) : (
@@ -477,6 +481,16 @@ export function ShotFactory() {
           activeIndex={lightboxShot.activeFrameIndex >= 0 ? lightboxShot.activeFrameIndex : 0}
           shotId={lightboxShot.manifest.id}
           onClose={() => setLightboxShotId(null)}
+        />
+      )}
+
+      {/* Video Lightbox Modal */}
+      {videoLightboxShot && videoLightboxShot.videoIterations.length > 0 && (
+        <VideoLightbox
+          videos={videoLightboxShot.videoIterations}
+          activeIndex={videoLightbox?.videoIndex ?? 0}
+          shotId={videoLightboxShot.manifest.id}
+          onClose={() => setVideoLightbox(null)}
         />
       )}
 

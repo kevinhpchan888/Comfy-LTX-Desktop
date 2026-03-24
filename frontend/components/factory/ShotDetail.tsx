@@ -46,6 +46,8 @@ interface ShotDetailProps {
   pexelsApiKey: string
   autoRenderAll: boolean
   onToggleAutoRender: () => void
+  /** Called when user double-clicks a video to open it fullscreen */
+  onVideoDoubleClick?: (videoIndex: number) => void
 }
 
 function Section({
@@ -98,6 +100,7 @@ export function ShotDetail({
   onToggleAutoRender,
   renderProgress,
   renderStatusMessage,
+  onVideoDoubleClick,
 }: ShotDetailProps) {
   const m = shot.manifest
   const duration = parseDuration(m.video.duration)
@@ -505,10 +508,14 @@ export function ShotDetail({
                     : 'border-zinc-700'
                 }`}
               >
-                <div className="relative h-16 w-28 overflow-hidden rounded bg-zinc-800">
+                <div
+                  className="relative h-16 w-28 overflow-hidden rounded bg-zinc-800 cursor-pointer group/vid"
+                  onDoubleClick={() => onVideoDoubleClick?.(idx)}
+                  title="Double-click to play fullscreen"
+                >
                   <video src={iter.url} className="h-full w-full object-cover" muted preload="metadata" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                    <Play className="h-5 w-5 text-white/80" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover/vid:bg-black/50 transition-colors">
+                    <Play className="h-5 w-5 text-white/80 group-hover/vid:text-white group-hover/vid:scale-110 transition-transform" />
                   </div>
                 </div>
                 <span className="text-[10px] text-zinc-400">v{idx + 1}</span>
