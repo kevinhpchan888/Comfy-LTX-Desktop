@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "project": "Comfy-LTX-Desktop",
+  "createdAt": "2026-06-20T09:39:16.658Z",
+  "memoryEngines": {
+    "cognee": {
+      "role": "project knowledge index",
+      "rebuildable": true
+    },
+    "graphiti": {
+      "role": "temporal event graph",
+      "rebuildable": true
+    },
+    "hermes": {
+      "role": "always-on coordinator",
+      "sourceOfTruth": false
+    }
+  },
+  "requiredFiles": [
+    "PROJECT.md",
+    "STATUS.md",
+    "DECISIONS.md",
+    "TASKS.md",
+    "HANDOFF.md",
+    "RULES.md",
+    "CONTEXT_INDEX.json"
+  ],
+  "semanticFiles": [
+    ".ai-memory/semantic/AGENT_STARTUP.md",
+    ".ai-memory/semantic/cognee-index.json",
+    ".ai-memory/semantic/graphiti-graph.json",
+    ".ai-memory/semantic/graphiti-episodes.jsonl"
+  ]
+}
